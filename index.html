@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.4, viewport-fit=cover">
+<title>Traffic Flow Simulation — San Miguel, Bulacan</title>
+<meta name="description" content="Computational traffic-flow simulation of San Miguel, Bulacan on the real OpenStreetMap road network with one-way directional segments.">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════ HEADER ══════════ -->
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <span class="lamp r"></span><span class="lamp y"></span><span class="lamp g"></span>
+      </div>
+      <div class="brand-txt">
+        <h1>Traffic Flow Simulation</h1>
+        <p>San&nbsp;Miguel, Bulacan &middot; real OpenStreetMap road network</p>
+      </div>
+    </div>
+
+    <div class="topbar-mid">
+      <div class="clock-wrap">
+        <span id="simClock">06:00</span>
+        <small id="simPhase">Early morning</small>
+      </div>
+      <div class="run-ctl">
+        <button id="btnPlay" class="btn btn-primary" title="Start / pause simulation">
+          <span class="ico" id="playIco">&#9654;</span><span id="playTxt">Start</span>
+        </button>
+        <button id="btnStep" class="btn" title="Advance one simulation step">Step</button>
+        <button id="btnReset" class="btn" title="Reset simulation">Reset</button>
+      </div>
+      <label class="speed-ctl" title="Simulation speed">
+        <span>Speed</span>
+        <input type="range" id="simSpeed" min="1" max="8" step="1" value="3">
+        <b id="simSpeedTxt">3&times;</b>
+      </label>
+    </div>
+
+    <div class="topbar-right">
+      <div class="stat-chip"><small>Vehicles</small><b id="hVeh">0</b></div>
+      <div class="stat-chip"><small>Avg speed</small><b id="hSpd">0</b></div>
+      <div class="stat-chip"><small>Network</small><b id="hLos">LOW</b></div>
+      <button id="btnPresentation" class="btn btn-icon" title="Presentation mode">&#9635;</button>
+      <button id="btnTheme" class="btn btn-icon" title="Toggle interface theme">☼</button>
+      <button id="btnPanel" class="btn btn-icon" title="Show/hide control panel">&#9776;</button>
+    </div>
+  </header>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main id="main">
+
+    <!-- LEFT: controls -->
+    <aside id="side" class="panel">
+      <nav class="tabs" role="tablist">
+        <button class="tab is-on" data-tab="control" role="tab">Control</button>
+        <button class="tab" data-tab="analytics" role="tab">Analytics</button>
+        <button class="tab" data-tab="compare" role="tab">Compare</button>
+        <button class="tab" data-tab="about" role="tab">Model</button>
+      </nav>
+
+      <!-- ── CONTROL TAB ── -->
+      <section class="tabpane is-on" data-pane="control">
+
+        <div class="block">
+          <h2>Traffic demand</h2>
+          <label class="row-ctl">
+            <span>Vehicles <b id="demandTxt">120</b></span>
+            <input type="range" id="demand" min="20" max="400" step="10" value="120">
+          </label>
+          <div class="profile-row">
+            <button class="profile-btn is-on" data-profile="manual">Manual</button>
+            <button class="profile-btn" data-profile="clock">Time-based</button>
+            <button class="profile-btn" data-profile="rush">Rush hour</button>
+          </div>
+          <div class="mini-note" id="demandNote">Total vehicles injected into the one-way network.</div>
+        </div>
+
+        <div class="block">
+          <h2>Weather</h2>
+          <div class="seg-ctl" id="weatherCtl">
+            <button data-w="sunny" class="is-on">Sunny</button>
+            <button data-w="cloudy">Cloudy</button>
+            <button data-w="rainy">Rainy</button>
+            <button data-w="heavy_rain">Heavy&nbsp;rain</button>
+            <button data-w="storm">Storm</button>
+            <button data-w="flooded">Flooded</button>
+          </div>
+          <div class="wx-readout">
+            <span>Speed factor <b id="wxSpd">1.00</b></span>
+            <span>Capacity factor <b id="wxCap">1.00</b></span>
+          </div>
+        </div>
+
+        <div class="block">
+          <h2>Scenarios <small id="scnCount">0 active</small></h2>
+          <div class="chips" id="scnChips"><!-- injected --></div>
+          <button id="btnClearScn" class="btn btn-wide">Clear all scenarios</button>
+        </div>
+
+        <div class="block">
+          <h2>Test location</h2>
+          <label class="location-select">
+            <span>Location to simulate</span>
+            <select id="testLocation">
+              <option value="">Whole network</option>
+            </select>
+          </label>
+          <label class="test-scope">
+            <input type="checkbox" id="localTest" checked>
+            <span><b>Only test selected location</b><small>Spawn and destination traffic around this location.</small></span>
+          </label>
+          <div class="test-actions">
+            <button id="btnApplyLocation" class="btn btn-primary btn-wide">Apply test location</button>
+            <button id="btnClearLocation" class="btn btn-wide">Whole network</button>
+          </div>
+          <div class="mini-note" id="testLocationNote">Whole network is active. Select a location to run a focused local test.</div>
+        </div>
+
+        <div class="block">
+          <h2>Traffic locations</h2>
+          <div class="locs" id="locList"><!-- injected --></div>
+        </div>
+
+        <div class="block">
+          <h2>Map layers</h2>
+          <div class="toggles" id="layerToggles">
+            <label><input type="checkbox" id="tgVeh" checked><span>Vehicles</span></label>
+            <label><input type="checkbox" id="tgArrow" checked><span>Direction arrows</span></label>
+            <label><input type="checkbox" id="tgTraffic" checked><span>Traffic colours</span></label>
+            <label><input type="checkbox" id="tgSignal" checked><span>Traffic lights</span></label>
+            <label><input type="checkbox" id="tgIncident" checked><span>Incidents</span></label>
+            <label><input type="checkbox" id="tgLm" checked><span>Landmarks</span></label>
+            <label><input type="checkbox" id="tgWater" checked><span>Rivers</span></label>
+            <label><input type="checkbox" id="tgLabel"><span>Road names</span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── ANALYTICS TAB ── -->
+      <section class="tabpane" data-pane="analytics">
+        <div class="block">
+          <h2>Network analytics</h2>
+          <div class="kpi-grid" id="kpiGrid"><!-- injected --></div>
+        </div>
+        <div class="block">
+          <h2>Average speed history</h2>
+          <canvas id="chartSpeed" height="90"></canvas>
+          <div class="chart-legend"><i class="sw-spd"></i>Avg speed (km/h)<i class="sw-den"></i>Congested roads (%)</div>
+        </div>
+        <div class="block">
+          <h2>Location statistics</h2>
+          <div class="loc-stats" id="locStats"><!-- injected --></div>
+        </div>
+        <div class="block">
+          <h2>Active incidents</h2>
+          <div class="incidents" id="incList"><!-- injected --></div>
+        </div>
+      </section>
+
+      <!-- ── COMPARE TAB ── -->
+      <section class="tabpane" data-pane="compare">
+        <div class="block">
+          <h2>Scenario comparison</h2>
+          <p class="mini-note">Capture the current state as a baseline, change conditions, then capture again to compare computed results side by side.</p>
+          <div class="cap-btns">
+            <button id="btnCapA" class="btn">Capture A</button>
+            <button id="btnCapB" class="btn">Capture B</button>
+            <button id="btnCapClr" class="btn">Clear</button>
+          </div>
+          <div id="cmpTable" class="cmp-wrap"><div class="empty">No captures yet.</div></div>
+        </div>
+        <div class="block">
+          <h2>Preset experiments</h2>
+          <div class="presets" id="presetList"><!-- injected --></div>
+          <div class="mini-note">A preset runs the baseline and the variant for a fixed number of simulation steps each, then reports the difference.</div>
+        </div>
+      </section>
+
+      <!-- ── MODEL TAB ── -->
+      <section class="tabpane" data-pane="about">
+        <div class="block">
+          <h2>Computational model</h2>
+          <div class="formula">
+            <b>Traffic density</b>
+            <code>k = N / L</code>
+            <small>vehicles per kilometre of directional road</small>
+          </div>
+          <div class="formula">
+            <b>Average speed</b>
+            <code>v̄ = Σvᵢ / N</code>
+            <small>mean of all vehicle speeds</small>
+          </div>
+          <div class="formula">
+            <b>Travel delay</b>
+            <code>D = Tactual − Tfree</code>
+            <small>actual minus free-flow travel time</small>
+          </div>
+          <div class="formula">
+            <b>Effective capacity</b>
+            <code>C = Cbase × fweather × fcondition</code>
+            <small>lane-metres reduced by weather and road state</small>
+          </div>
+          <div class="formula">
+            <b>Volume / capacity</b>
+            <code>x = N / C</code>
+            <small>x&lt;1 free flow · x≈1 unstable · x&gt;1 congestion</small>
+          </div>
+          <div class="formula">
+            <b>Car following (IDM)</b>
+            <code>a = a₀[1 − (v/v₀)⁴ − (s*/s)²]</code>
+            <small>s* = s₀ + vT + vΔv / 2√(a₀b)</small>
+          </div>
+        </div>
+        <div class="block">
+          <h2>Traffic level thresholds</h2>
+          <table class="lvl-table">
+            <tr><td><i class="dot lv-low"></i>LOW</td><td>x &lt; 0.35</td><td>normal movement</td></tr>
+            <tr><td><i class="dot lv-med"></i>MEDIUM</td><td>0.35 – 0.60</td><td>beginning to slow</td></tr>
+            <tr><td><i class="dot lv-high"></i>HIGH</td><td>0.60 – 0.85</td><td>queues forming</td></tr>
+            <tr><td><i class="dot lv-vhigh"></i>VERY HIGH</td><td>&ge; 0.85</td><td>heavy congestion</td></tr>
+          </table>
+        </div>
+        <div class="block">
+          <h2>Network</h2>
+          <div class="net-meta" id="netMeta"><!-- injected --></div>
+        </div>
+        <div class="block">
+          <h2>Data source</h2>
+          <p class="mini-note">Road geometry, intersections, road names, rivers and landmarks are extracted from
+          <b>OpenStreetMap</b> (&copy; OpenStreetMap contributors, ODbL) for San Miguel, Bulacan. Every road segment
+          carries an assigned traffic direction; the directed network is verified strongly connected, so vehicles can
+          always reach a destination without driving against traffic.</p>
+        </div>
+      </section>
+    </aside>
+
+    <!-- RIGHT: map -->
+    <div id="mapwrap">
+      <div id="map"></div>
+
+      <div id="loading"><div class="spin"></div><span>Loading San Miguel road network…</span></div>
+
+      <!-- floating legend -->
+      <div id="legend" class="glass">
+        <div class="lg-title">Traffic level</div>
+        <div class="lg-row"><i class="sw lv-low"></i>LOW</div>
+        <div class="lg-row"><i class="sw lv-med"></i>MEDIUM</div>
+        <div class="lg-row"><i class="sw lv-high"></i>HIGH</div>
+        <div class="lg-row"><i class="sw lv-vhigh"></i>VERY HIGH</div>
+        <div class="lg-sep"></div>
+        <div class="lg-row"><i class="sw sw-block"></i>Blocked / impassable</div>
+        <div class="lg-row"><i class="sw sw-arrow">&#9656;</i>One-way direction</div>
+      </div>
+
+      <!-- weather badge -->
+      <div id="wxBadge" class="glass"><span id="wxIcon">&#9728;</span><span id="wxName">Sunny</span></div>
+
+      <!-- selected road / location inspector -->
+      <div id="vehicleLegend" class="glass">
+        <div class="lg-title">Vehicles</div>
+        <div class="veh-lg"><i class="vlg-dot motorcycle"></i>Motorcycle <i class="vlg-dot car"></i>Car</div>
+        <div class="veh-lg"><i class="vlg-dot tricycle"></i>Tricycle <i class="vlg-dot jeepney"></i>Jeepney</div>
+        <div class="veh-lg"><i class="vlg-dot bus"></i>Bus <i class="vlg-dot truck"></i>Truck</div>
+        <div class="veh-lg"><i class="vlg-dot emergency"></i>Emergency</div>
+      </div>
+
+      <div id="inspector" class="glass">
+        <button id="inspClose" class="insp-x" aria-label="Close">&times;</button>
+        <div id="inspBody"></div>
+      </div>
+
+      <!-- mobile quick bar -->
+      <div id="mobbar">
+        <button class="mb" data-mb="control">Control</button>
+        <button class="mb" data-mb="analytics">Analytics</button>
+        <button class="mb" data-mb="compare">Compare</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="js/model.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/mapview.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
