@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════
-   Traffic Flow Simulation — San Miguel, Bulacan
-   ═══════════════════════════════════════════════════════════ */
+
 :root{
   --bg:#0d1117; --bg2:#141b24; --bg3:#1b2430; --line:#26313f;
   --txt:#e6edf5; --dim:#8fa3ba; --dim2:#647a92;
@@ -21,13 +19,13 @@ body{
 }
 #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
-/* ── scrollbars ── */
+
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#2d3a4a;border-radius:9px}
 ::-webkit-scrollbar-thumb:hover{background:#3b4c60}
 
-/* ═════════ HEADER ═════════ */
+
 #topbar{
   height:var(--hdr);flex:0 0 var(--hdr);display:flex;align-items:center;
   gap:14px;padding:0 14px;background:linear-gradient(180deg,#151d27,#111820);
@@ -92,7 +90,7 @@ body{
 .fps-chip.fps-critical b,.fps-chip.fps-critical span{color:#ef4444}
 #btnPanel{display:none}
 
-/* range inputs */
+
 input[type=range]{
   -webkit-appearance:none;appearance:none;height:4px;background:#2b3644;
   border-radius:4px;outline:none;cursor:pointer;
@@ -106,7 +104,7 @@ input[type=range]::-moz-range-thumb{
   border:2px solid #0d1117;cursor:pointer;border:none;
 }
 
-/* ═════════ LAYOUT ═════════ */
+
 #main{flex:1;display:flex;min-height:0;position:relative}
 #side{
   width:var(--side);flex:0 0 var(--side);display:flex;flex-direction:column;
@@ -135,13 +133,13 @@ input[type=range]::-moz-range-thumb{
 .block h2 small{font-size:9.5px;font-weight:600;color:var(--acc);text-transform:none;letter-spacing:0}
 .mini-note{font-size:10.5px;color:var(--dim2);line-height:1.5;margin-top:7px}
 
-/* ── demand row ── */
+
 .row-ctl{display:flex;flex-direction:column;gap:6px}
 .row-ctl span{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim)}
 .row-ctl b{font-family:var(--mono);color:var(--txt)}
 .row-ctl input{width:100%}
 
-/* ── segmented weather ── */
+
 .seg-ctl{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
 .seg-ctl button{
   padding:7px 3px;font-size:10.5px;font-weight:550;font-family:inherit;color:var(--dim);
@@ -153,7 +151,7 @@ input[type=range]::-moz-range-thumb{
 .wx-readout{display:flex;justify-content:space-between;margin-top:9px;font-size:10.5px;color:var(--dim2)}
 .wx-readout b{font-family:var(--mono);color:var(--acc)}
 
-/* ── scenario chips ── */
+
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{
   padding:5px 9px;font-size:10.5px;font-weight:550;font-family:inherit;color:var(--dim);
@@ -165,7 +163,7 @@ input[type=range]::-moz-range-thumb{
 .chip.is-on.wx{background:#122a3d;border-color:#2b6f9e;color:#8fd0ff}
 .chip.is-on::before{content:"●";font-size:7px;color:currentColor}
 
-/* ── locations ── */
+
 .locs{display:flex;flex-direction:column;gap:6px}
 .loc{
   display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--bg3);
@@ -188,12 +186,12 @@ input[type=range]::-moz-range-thumb{
 .loc-lv.lv-high{background:rgba(249,115,22,.14)}
 .loc-lv.lv-vhigh{background:rgba(239,68,68,.16)}
 
-/* ── layer toggles ── */
+
 .toggles{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px}
 .toggles label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer}
 .toggles input{accent-color:var(--acc);width:13px;height:13px;cursor:pointer}
 
-/* ═════════ ANALYTICS ═════════ */
+
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .kpi{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:8px 9px}
 .kpi small{display:block;font-size:9px;color:var(--dim2);text-transform:uppercase;letter-spacing:.4px}
@@ -228,7 +226,7 @@ input[type=range]::-moz-range-thumb{
 .inc-sub{color:var(--dim2);font-size:9.5px;margin-top:1px}
 .empty{padding:14px;text-align:center;font-size:11px;color:var(--dim2);background:var(--bg3);border:1px dashed var(--line);border-radius:8px}
 
-/* ═════════ COMPARE ═════════ */
+
 .cap-btns{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin:9px 0}
 .cmp-wrap{overflow-x:auto}
 table.cmp{width:100%;border-collapse:collapse;font-size:10.5px}
@@ -253,7 +251,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
 .preset span.go{font-size:13px;color:var(--acc)}
 #cmpBusy{font-size:10.5px;color:var(--acc);padding:8px 0}
 
-/* ═════════ MODEL TAB ═════════ */
+
 .formula{
   background:#0a1017;border:1px solid var(--line);border-left:2px solid var(--acc);
   border-radius:7px;padding:8px 10px;margin-bottom:7px;
@@ -272,7 +270,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
 .net-meta{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:10.5px;color:var(--dim2)}
 .net-meta b{font-family:var(--mono);color:var(--txt);text-align:right}
 
-/* ═════════ MAP OVERLAYS ═════════ */
+
 .glass{
   background:rgba(15,22,31,.93);border:1px solid rgba(255,255,255,.09);
   border-radius:var(--r2);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
@@ -336,7 +334,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
 
 #mobbar{display:none}
 
-/* ═════════ LEAFLET SKIN ═════════ */
+
 .leaflet-container{background:#101820;font-family:var(--sans)}
 .leaflet-control-zoom a{
   background:rgba(15,22,31,.93)!important;color:var(--txt)!important;
@@ -349,7 +347,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
 .leaflet-control-attribution a{color:var(--dim)!important}
 .leaflet-bar{border:none!important;box-shadow:0 3px 12px rgba(0,0,0,.4)!important}
 
-/* map markers */
+
 .loc-mk{background:none;border:none}
 .loc-pin{
   display:flex;align-items:center;gap:4px;padding:3px 7px 3px 5px;border-radius:16px;
@@ -404,7 +402,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
   text-shadow:0 1px 3px #000,0 0 5px #000;pointer-events:none;font-weight:500;
 }
 
-/* ═════════ RESPONSIVE ═════════ */
+
 @media (max-width:1080px){
   :root{--side:312px}
   .brand-txt p{display:none}
@@ -490,7 +488,7 @@ table.cmp td b{font-family:var(--mono);font-size:11.5px}
 }
 
 
-/* ═════════ PROFESSIONAL UI UPGRADE ═════════ */
+
 .profile-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:9px}
 .profile-btn{padding:6px 5px;border:1px solid var(--line);background:var(--bg3);color:var(--dim);border-radius:7px;font:600 10px var(--sans);cursor:pointer}
 .profile-btn:hover{color:var(--txt);background:#243040}
@@ -522,7 +520,7 @@ body.presentation #btnPresentation{background:var(--acc2);color:#fff}
 #hLos{padding:1px 5px;border-radius:5px}
 #hLos.lv-low{background:rgba(34,197,94,.12)}#hLos.lv-med{background:rgba(234,179,8,.12)}#hLos.lv-high{background:rgba(249,115,22,.12)}#hLos.lv-vhigh{background:rgba(239,68,68,.12)}
 .status-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--low);box-shadow:0 0 8px currentColor;vertical-align:middle;margin-right:4px}
-/* stronger focus/accessibility */
+
 button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 @media(max-width:860px){
   #vehicleLegend{display:block;right:12px;bottom:58px;font-size:8.5px;padding:7px 9px}
@@ -534,11 +532,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-of
   .profile-row{grid-template-columns:1fr 1fr 1fr}
 }
 
-/* Lightweight weather canvas sits above map data and below floating controls. */
+
 .weather-canvas{mix-blend-mode:screen;opacity:.9;}
 @media (prefers-reduced-motion:reduce){.weather-canvas{display:none!important}}
 
-/* ── focused test location ── */
+
 .location-select{display:block}
 .location-select>span{display:block;font-size:10px;color:var(--dim2);margin-bottom:5px}
 .location-select select{width:100%;min-height:34px;padding:7px 9px;border-radius:7px;border:1px solid var(--line);background:var(--bg3);color:var(--txt);font:inherit;font-size:11px;outline:none}
@@ -550,14 +548,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-of
 .test-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:7px}
 .test-actions .btn{font-size:10px}
 
-/* ── performance mode control ── */
+
 .perf-modes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:7px}
 .perf-btn{min-width:0;padding:7px 5px;border:1px solid var(--line);border-radius:7px;background:var(--bg3);color:var(--dim);font:600 10px var(--sans);cursor:pointer;transition:background .13s,border-color .13s,color .13s}
 .perf-btn:hover{background:#243040;color:var(--txt)}
 .perf-btn.is-on{background:var(--acc2);border-color:#2b7ae5;color:#fff}
 .block h2 small#perfModeNote{font-size:9px;color:var(--acc);font-weight:600;text-transform:uppercase;letter-spacing:.35px}
 
-/* ── simulation run timer ── */
+
 .timer-chip{display:flex;flex-direction:column;justify-content:center;min-width:76px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg3);line-height:1.05}
 .timer-chip small{font-size:8px;color:var(--dim2);text-transform:uppercase;letter-spacing:.45px}
 .timer-chip b{font:700 12px var(--mono);color:var(--txt);margin-top:2px}
@@ -572,7 +570,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-of
   .timer-chip{min-width:64px}
 }
 
-/* fully settable simulation timer */
+
 .timer-duration-grid{grid-template-columns:repeat(3,1fr)}
 .timer-start-grid{margin-top:7px;grid-template-columns:1fr auto;align-items:end}
 .timer-apply{min-height:34px;white-space:nowrap}
@@ -581,7 +579,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-of
 .timer-presets button:hover{border-color:var(--acc);color:var(--acc)}
 @media(max-width:560px){.timer-duration-grid{grid-template-columns:1fr 1fr 1fr}.timer-start-grid{grid-template-columns:1fr}.timer-apply{width:100%;margin-top:5px}.timer-presets button{padding:6px 7px}}
 
-/* ═════════ SAN MIGUEL ACTIVITY HISTORY ═════════ */
+
 .history-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .history-title-row h2{margin-bottom:5px}
 .history-filters{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}

@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════════
-   ui.js — controls, analytics dashboard, inspector, comparison
-   ═══════════════════════════════════════════════════════════════════ */
+
 'use strict';
 
 const $ = s => document.querySelector(s);
@@ -27,7 +25,7 @@ let lastUiRefresh = 0;
 let historyFilter = 'all';
 let historyDirty = true;
 
-/* ════════════════════════ boot ════════════════════════ */
+
 (async function boot() {
   let net;
   try {
@@ -59,7 +57,7 @@ let historyDirty = true;
   requestAnimationFrame(() => { $('#loading').classList.add('done'); });
 })();
 
-/* ════════════════════════ live FPS monitor ════════════════════════ */
+
 function startFPSMonitor() {
   if (fpsRaf) return;
   fpsLast = performance.now();
@@ -115,9 +113,9 @@ function updateFPSUI(fps, frameMs) {
   chip.title = `Live rendering: ${fps} FPS, ${frameMs.toFixed(1)} ms/frame`;
 }
 
-/* ════════════════════════ control binding ════════════════════════ */
+
 function bindControls() {
-  // tabs
+  
   $$('.tab').forEach(t => t.addEventListener('click', () => {
     $$('.tab').forEach(x => x.classList.toggle('is-on', x === t));
     $$('.tabpane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === t.dataset.tab));
@@ -125,7 +123,7 @@ function bindControls() {
     if (t.dataset.tab === 'history') { historyDirty = true; renderHistory(); }
   }));
 
-  // mobile bar + panel toggle
+  
   $$('.mb').forEach(b => b.addEventListener('click', () => {
     const tab = $$('.tab').find(x => x.dataset.tab === b.dataset.mb);
     if (tab) tab.click();
@@ -146,7 +144,7 @@ function bindControls() {
     if (window.innerWidth <= 860) $('#side').classList.remove('is-open');
   });
 
-  // run controls
+  
   $('#btnPlay').addEventListener('click', togglePlay);
   $('#btnStep').addEventListener('click', () => {
     if (sim.timerEnabled && sim.runElapsed >= sim.runDuration) return;
@@ -239,7 +237,7 @@ function bindControls() {
     renderTimer();
   });
 
-  // demand
+  
   $('#demand').addEventListener('input', e => {
     const n = +e.target.value;
     $('#demandTxt').textContent = n;
@@ -247,11 +245,11 @@ function bindControls() {
     renderKpis();
   });
 
-  // weather
+  
   $$('#weatherCtl button').forEach(b => b.addEventListener('click', () => {
     $$('#weatherCtl button').forEach(x => x.classList.toggle('is-on', x === b));
     sim.setWeather(b.dataset.w);
-    // keep weather-scenario chips consistent
+    
     const wxScn = M.SCENARIOS.filter(s => s.group === 'wx');
     wxScn.forEach(s => sim.scenarios.delete(s.key));
     const match = wxScn.find(s => s.wx === b.dataset.w);
@@ -269,7 +267,7 @@ function bindControls() {
     renderAll();
   });
 
-  // focused test location
+  
   $('#btnApplyLocation').addEventListener('click', () => {
     const id = $('#testLocation').value;
     const local = $('#localTest').checked;
@@ -308,26 +306,26 @@ function bindControls() {
     }
   });
 
-  // performance modes
+  
   $$('#perfModes .perf-btn').forEach(b => b.addEventListener('click', () => {
     setPerformanceMode(b.dataset.perf);
   }));
 
-  // layer toggles
+  
   const map = { tgVeh:'veh', tgTraffic:'traffic', tgSignal:'signal',
                 tgIncident:'incident', tgLm:'lm', tgWater:'water', tgLabel:'label' };
   Object.entries(map).forEach(([id, key]) => {
     $('#' + id).addEventListener('change', e => view.setLayer(key, e.target.checked));
   });
 
-  // inspector close
+  
   $('#inspClose').addEventListener('click', () => {
     $('#inspector').classList.remove('is-on');
     view.clearSelection();
     selectedInfo = null;
   });
 
-  // activity history
+  
   $$('#historyFilters .history-filter').forEach(b => b.addEventListener('click', () => {
     historyFilter = b.dataset.historyFilter || 'all';
     $$('#historyFilters .history-filter').forEach(x => x.classList.toggle('is-on', x === b));
@@ -341,12 +339,12 @@ function bindControls() {
     renderHistory();
   });
 
-  // comparison
+  
   $('#btnCapA').addEventListener('click', () => { captures.A = sim.snapshot('A'); renderCompare(); });
   $('#btnCapB').addEventListener('click', () => { captures.B = sim.snapshot('B'); renderCompare(); });
   $('#btnCapClr').addEventListener('click', () => { captures = { A:null, B:null }; renderCompare(); });
 
-  // keyboard
+  
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -437,7 +435,7 @@ function togglePlay() {
   else if (raf) { cancelAnimationFrame(raf); raf = null; }
 }
 
-/* ════════════════════════ animation loop ════════════════════════ */
+
 function loop() {
   if (!sim.running) return;
   raf = requestAnimationFrame(loop);
@@ -446,20 +444,20 @@ function loop() {
   lastFrame = now;
 
   const mult = +$('#simSpeed').value;
-  // Run one simulation update per browser frame instead of several full
-  // network passes in the same frame. The previous loop could execute up to
-  // 8 expensive vehicle/road updates back-to-back and caused an immediate
-  // FPS drop as soon as the simulation started moving vehicles.
-  // Scale the timestep to preserve the selected simulation speed while
-  // keeping the amount of JavaScript work per frame predictable.
+  
+  
+  
+  
+  
+  
   const dtBase = Math.min(0.9, Math.max(0.25, real * 12 * mult));
   const dt = sim.timerEnabled ? Math.min(dtBase, Math.max(0, sim.runDuration - sim.runElapsed)) : dtBase;
   if (dt > 0) sim.step(dt);
   if (sim.timerEnabled && sim.runElapsed >= sim.runDuration) finishRunTimer();
 
-  // Performance budget: keep the simulation responsive, but do not repaint
-  // expensive UI/map layers at the browser's full 60 Hz. Static road geometry
-  // is SVG and is moved by Leaflet; dynamic vehicles are capped at ~30 FPS.
+  
+  
+  
   if (sim.tick % 8 === 0) sim.computeStats();
 
   const perf = view.getPerformanceProfile();
@@ -483,7 +481,7 @@ function loop() {
   if (sim.tick % 30 === 0 && selectedInfo) renderInspector(selectedInfo);
 }
 
-/* ════════════════════════ scenario chips ════════════════════════ */
+
 function buildScenarioChips() {
   const wrap = $('#scnChips');
   wrap.innerHTML = '';
@@ -502,7 +500,7 @@ function buildScenarioChips() {
     });
     wrap.appendChild(b);
   }
-  // "normal traffic" = clear all
+  
   const norm = document.createElement('button');
   norm.className = 'chip';
   norm.textContent = 'Normal Traffic';
@@ -531,7 +529,7 @@ function syncScenarioUI() {
   view.setWeatherTint(wx);
 }
 
-/* ════════════════════════ location list ════════════════════════ */
+
 function buildLocationList() {
   const wrap = $('#locList');
   const select = $('#testLocation');
@@ -603,7 +601,7 @@ function renderLocations() {
   }
 }
 
-/* ════════════════════════ header + clock ════════════════════════ */
+
 function renderClock() {
   const h = Math.floor(sim.time / 3600), m = Math.floor((sim.time % 3600) / 60);
   $('#simClock').textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
@@ -620,7 +618,7 @@ function renderHeader() {
   el.title = `Network condition: ${s.level.key} · v/c ${M.fmt(s.vc,2)}`;
 }
 
-/* ════════════════════════ KPI dashboard ════════════════════════ */
+
 function renderKpis() {
   const s = sim.stats;
   const cells = [
@@ -676,7 +674,7 @@ function renderIncidents() {
   }).join('');
 }
 
-/* ════════════════════════ per-location stats ════════════════════════ */
+
 function renderLocStats() {
   const wrap = $('#locStats');
   wrap.innerHTML = sim.locs.map(L => {
@@ -704,7 +702,7 @@ function renderLocStats() {
   }).join('');
 }
 
-/* ════════════════════════ history chart ════════════════════════ */
+
 function drawChart() {
   const c = $('#chartSpeed');
   if (!c) return;
@@ -724,7 +722,7 @@ function drawChart() {
   const pad = { l: 26, r: 24, t: 8, b: 14 };
   const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
 
-  // grid
+  
   ctx.strokeStyle = '#1d2732'; ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i++) {
     const y = pad.t + (ih * i) / 3;
@@ -740,7 +738,7 @@ function drawChart() {
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.strokeStyle = color; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.stroke();
-    // fill
+    
     ctx.lineTo(pad.l + iw, pad.t + ih); ctx.lineTo(pad.l, pad.t + ih); ctx.closePath();
     const g = ctx.createLinearGradient(0, pad.t, 0, pad.t + ih);
     g.addColorStop(0, color + '38'); g.addColorStop(1, color + '00');
@@ -758,7 +756,7 @@ function drawChart() {
   ctx.fillText('100%', pad.l + iw + 3, pad.t + 7);
 }
 
-/* ════════════════════════ inspector ════════════════════════ */
+
 function onMapSelect(info) {
   selectedInfo = info;
   if (!info) { $('#inspector').classList.remove('is-on'); return; }
@@ -853,7 +851,7 @@ function signalText(s) {
   return `<span style="color:${col[info.light]}">${map[info.light]}</span>`;
 }
 
-/* ════════════════════════ comparison ════════════════════════ */
+
 function buildPresets() {
   const presets = [
     { id:'rain',  label:'Normal vs Heavy Rain',   base:[], var:['heavy_rain'], desc:'same demand, weather changed' },
@@ -885,14 +883,14 @@ function runPreset(p) {
 
   setTimeout(() => {
     const WARM = 240;
-    // baseline
+    
     sim.scenarios = new Set(p.base);
     sim.weather = 'sunny';
     sim.reset();
     sim.runSteps(WARM, 0.9);
     const A = sim.snapshot('Normal');
 
-    // variant
+    
     sim.scenarios = new Set(p.var);
     const wxScn = M.SCENARIOS.find(s => s.group === 'wx' && p.var.includes(s.key));
     sim.weather = wxScn ? wxScn.wx : 'sunny';
@@ -902,7 +900,7 @@ function runPreset(p) {
 
     captures.A = A; captures.B = B;
 
-    // restore
+    
     sim.scenarios = savedScn;
     sim.weather = savedWx;
     sim.reset();
@@ -953,7 +951,7 @@ function renderCompare() {
     <td><b>${A ? A.level : '—'}</b></td><td><b>${B ? B.level : '—'}</b></td><td>—</td></tr>`;
   html += '</tbody></table>';
 
-  // per-location level comparison
+  
   if (A && B) {
     html += `<table class="cmp" style="margin-top:10px"><thead><tr><th>Location</th>
       <th>${esc(A.label)}</th><th>${esc(B.label)}</th></tr></thead><tbody>`;

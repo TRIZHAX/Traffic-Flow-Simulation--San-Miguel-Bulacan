@@ -1,7 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════════
-   mapview.js — Leaflet real-map rendering: roads coloured by traffic
-   level, vehicles, signals, incidents, landmarks.
-   ═══════════════════════════════════════════════════════════════════ */
+
 'use strict';
 
 class MapView {
@@ -26,15 +23,15 @@ class MapView {
     this.scheduleVehicleDraw();
   }
 
-  /* ───────────────────────────────────────────── map + basemap */
+  
   initMap() {
     const bb = this.sim.net.meta.bbox;
     this.map = L.map('map', {
       zoomControl: true,
       attributionControl: true,
-      // Use SVG for the static road network. Leaflet can move the SVG pane with
-      // a single transform while panning instead of repainting an 808-path
-      // canvas on every pointer-move. Vehicles/weather use their own canvases.
+      
+      
+      
       preferCanvas: false,
       zoomSnap: 0.5,
       zoomAnimation: false,
@@ -74,9 +71,9 @@ class MapView {
       pane: 'pRef', maxZoom: 18, maxNativeZoom: 17, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 1, attribution: ''
     }).addTo(this.map);
 
-    // Shared SVG renderers keep static geometry in a single DOM tree. This is
-    // considerably cheaper to pan than Leaflet's Canvas renderer for this
-    // network size because the browser can transform the SVG pane as a unit.
+    
+    
+    
     this.roadRenderer = L.svg({ padding: 0.05 });
     this.waterRenderer = L.svg({ padding: 0.05 });
 
@@ -91,13 +88,13 @@ class MapView {
     this.gInc     = L.layerGroup([], { pane: 'pMark' }).addTo(this.map);
     this.gLabel   = L.layerGroup([], { pane: 'pLabel' });
 
-    // vehicle canvas overlay
+    
     this.initVehicleCanvas();
-    // lightweight weather animation overlay (canvas, not DOM particles)
+    
     this.initWeatherCanvas();
 
-    // Keep map dragging/zooming lightweight. Heavy simulation overlays are
-    // hidden while Leaflet is moving, then rendered once the map settles.
+    
+    
     this.map.on('movestart zoomstart', () => this.setMapInteractionState(true));
     this.map.on('moveend', () => { this.setMapInteractionState(false); this.scheduleVehicleDraw(); });
     this.map.on('zoomend', () => { this.onZoom(); this.setMapInteractionState(false); this.scheduleVehicleDraw(); });
@@ -150,8 +147,8 @@ class MapView {
         }
         const tl = map.containerPointToLayerPoint([0, 0]);
         L.DomUtil.setPosition(this._canvas, tl);
-        // Leaflet moves the canvas with the map during drag/zoom. Do not redraw
-        // thousands of vehicle projections on every move event; redraw after settle.
+        
+        
       }
     });
     this.vehLayer = new CanvasLayer();
@@ -159,10 +156,7 @@ class MapView {
   }
 
   
-  /* ───────────────────────── focused-location rendering
-     In focused test mode, the selected road zone is the only custom
-     simulation geometry rendered on top of the basemap. The basemap itself
-     remains visible for geographic context. */
+  
   getFocusBounds() {
     const ids = this.sim.testZoneSet;
     if (!this.sim.localTestMode || !this.sim.testLocationId || !ids || !ids.size) return null;
@@ -176,8 +170,8 @@ class MapView {
       }
     }
     if (!Number.isFinite(south)) return null;
-    // Small padding keeps the selected area's nearby context without drawing
-    // the rest of the network.
+    
+    
     const padLat = Math.max((north - south) * 0.08, 0.0015);
     const padLon = Math.max((east - west) * 0.08, 0.0015);
     return { south: south - padLat, west: west - padLon, north: north + padLat, east: east + padLon };
@@ -192,7 +186,7 @@ class MapView {
     this.focusFilterActive = !!(this.sim.localTestMode && this.sim.testLocationId && this.sim.testZoneSet && this.sim.testZoneSet.size);
     this.focusBounds = this.getFocusBounds();
     if (!this.focusFilterActive) {
-      // Restore all static layers.
+      
       for (let i = 0; i < this.roadLines.length; i++) {
         if (this.caseLines[i] && !this.gCase.hasLayer(this.caseLines[i])) this.gCase.addLayer(this.caseLines[i]);
         if (this.roadLines[i] && !this.gRoad.hasLayer(this.roadLines[i])) this.gRoad.addLayer(this.roadLines[i]);
@@ -204,7 +198,7 @@ class MapView {
         opacity: 0.75, interactive: false, lineJoin: 'round'
       }).addTo(this.gWater);
     } else {
-      // Remove every road that is outside the selected simulation zone.
+      
       for (let i = 0; i < this.sim.segs.length; i++) {
         const keep = this.sim.testZoneSet.has(i);
         const ln = this.roadLines[i], cs = this.caseLines[i];
@@ -216,7 +210,7 @@ class MapView {
           if (ln && this.gRoad.hasLayer(ln)) this.gRoad.removeLayer(ln);
         }
       }
-      // Draw only water that crosses the focused zone.
+      
       this.gWater.clearLayers();
       for (const w of this.sim.net.water) {
         const keep = w.pts.some(p => this.pointInFocus(p[0], p[1]));
@@ -238,7 +232,7 @@ class MapView {
   drawStatic() {
     const sim = this.sim;
 
-    // rivers / streams
+    
     for (const w of sim.net.water) {
       L.polyline(w.pts, {
         renderer: this.waterRenderer,
@@ -492,9 +486,9 @@ class MapView {
       ctx.rotate(v.hdg * Math.PI / 180);
       ctx.globalAlpha = v.stoppedFlag ? .78 : 1;
 
-      // Performance/Ultra use a very cheap vehicle primitive. This avoids
-      // hundreds of path-building operations and shadows on every redraw,
-      // while keeping the vehicles visible and color-coded.
+      
+      
+      
       if (this.performanceMode !== 'normal') {
         ctx.fillStyle = T.color;
         ctx.fillRect(-bodyW/2, -bodyH/2, bodyW, bodyH);
@@ -506,26 +500,26 @@ class MapView {
         continue;
       }
 
-      // subtle shadow makes the tiny vehicles readable over road colors
+      
       ctx.fillStyle = 'rgba(0,0,0,.48)';
       this.roundRect(ctx, -bodyW/2 + 1, -bodyH/2 + 1.2, bodyW, bodyH, Math.min(bodyW, bodyH)*.3); ctx.fill();
       ctx.fillStyle = T.color;
       this.roundRect(ctx, -bodyW/2, -bodyH/2, bodyW, bodyH, Math.min(bodyW, bodyH)*.3); ctx.fill();
 
       if (z >= 15.5) {
-        // cabin / windshield
+        
         const cabinW = bodyW * .72, cabinH = bodyH * .43;
         ctx.fillStyle = 'rgba(8,18,28,.72)';
         this.roundRect(ctx, -cabinW/2, -bodyH*.23, cabinW, cabinH, Math.min(cabinW,cabinH)*.18); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,.24)';
         ctx.fillRect(-cabinW*.32, -bodyH*.18, cabinW*.64, Math.max(1, cabinH*.18));
-        // wheels / side details
+        
         ctx.fillStyle = 'rgba(4,8,12,.9)';
         const ww = Math.max(1, bodyW*.18), wh = Math.max(1.5, bodyH*.18);
         ctx.fillRect(-bodyW/2-0.3,-bodyH*.30,ww,wh); ctx.fillRect(bodyW/2-ww+0.3,-bodyH*.30,ww,wh);
         ctx.fillRect(-bodyW/2-0.3,bodyH*.12,ww,wh); ctx.fillRect(bodyW/2-ww+0.3,bodyH*.12,ww,wh);
       }
-      // headlights / direction cue
+      
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(-Math.max(1,bodyW*.18), -bodyH/2+.4, Math.max(2,bodyW*.36), Math.max(.8,bodyH*.07));
       if (v.type === 'emergency' && z >= 14.5) {
@@ -552,7 +546,7 @@ class MapView {
     ctx.quadraticCurveTo(x, y, x + r, y);
   }
 
-  /* ─────────────────────────── selection & zoom handling */
+  
   select(idx) {
     this.clearSelection();
     this.selected = idx;
@@ -560,12 +554,12 @@ class MapView {
     if (!ln) return;
     const s = this.sim.segs[idx];
     ln.setStyle({ weight: this.lineWeight(s, this.map.getZoom()) + 3.4, opacity: 1 });
-    // highlight arrow of travel direction
+    
     this.selHalo = L.polyline(s.pts, {
       pane: 'pMark', color: '#ffffff', weight: this.lineWeight(s, this.map.getZoom()) + 6,
       opacity: 0.22, interactive: false, lineCap: 'round'
     }).addTo(this.map);
-    // start / end markers showing direction
+    
     const a = s.pts[0], b = s.pts[s.pts.length - 1];
     this.selEnds = L.layerGroup([
       L.circleMarker(a, { pane: 'pMark', radius: 4, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1, weight: 1, interactive: false }),
@@ -628,7 +622,7 @@ class MapView {
     if (k === 'traffic') { if (on) this.refreshRoads(); else this.plainRoads(); }
   }
 
-  /* weather visual tint + lightweight animated weather overlay */
+  
   setWeatherTint(wx) {
     const el = document.getElementById('map');
     if (!el) return;
@@ -656,7 +650,7 @@ class MapView {
     document.addEventListener('visibilitychange', () => { this.weatherVisible = !document.hidden; });
     this.weatherLoop = (now) => {
       const profile = this.performanceProfile[this.performanceMode] || this.performanceProfile.normal;
-      // Decorative weather is completely paused outside Normal mode.
+      
       if (profile.weather && this.weatherVisible && !this.weatherReduced && !this.mapMoving && now - this.weatherLastDraw >= profile.weatherMs) {
         this.drawWeather(now);
         this.weatherLastDraw = now;
@@ -708,8 +702,8 @@ class MapView {
         if (this.weatherCtx) this.weatherCtx.clearRect(0, 0, this.weatherCanvas.width, this.weatherCanvas.height);
       }
     }
-    // Ultra keeps the simulation readable but removes the two most expensive
-    // nonessential marker groups: landmark DOM markers and signal DOM markers.
+    
+    
     if (next === 'ultra') {
       this.gLm.clearLayers();
       this.gSig.clearLayers();
@@ -782,10 +776,10 @@ class MapView {
     }
   }
 
-  /* per-frame refresh */
+  
   refresh() {
-    // Backwards-compatible full refresh for external callers. The main loop
-    // now stages these operations to avoid expensive Leaflet work every frame.
+    
+    
     this.refreshRoads();
     this.refreshSignals();
     this.drawVehicles();

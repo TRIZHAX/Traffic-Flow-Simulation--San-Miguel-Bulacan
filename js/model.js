@@ -1,17 +1,9 @@
-/* ═══════════════════════════════════════════════════════════════════
-   model.js — constants, weather, road conditions, scenarios, math
-   Traffic Flow Simulation · San Miguel, Bulacan
-   ═══════════════════════════════════════════════════════════════════ */
+
 'use strict';
 
 const M = {};
 
-/* ───────────────── vehicle types ─────────────────
-   len   : physical length (m) — used for capacity consumption & spacing
-   vmax  : free-flow speed multiplier vs. road speed limit
-   acc   : max acceleration (m/s²)
-   dec   : comfortable braking (m/s²)
-   share : default fleet composition (Philippine provincial mix)         */
+
 M.VTYPES = {
   motorcycle: { key:'motorcycle', label:'Motorcycle', len:2.2,  vmax:1.05, acc:2.6, dec:3.4, share:0.34, maxFlood:0.10, color:'#f472b6', w:2.6 },
   car:        { key:'car',        label:'Car',        len:4.4,  vmax:1.00, acc:2.0, dec:3.0, share:0.36, maxFlood:0.24, color:'#60a5fa', w:3.2 },
@@ -23,10 +15,7 @@ M.VTYPES = {
 };
 M.VLIST = Object.keys(M.VTYPES);
 
-/* ───────────────── weather ─────────────────
-   spd : free-flow speed factor
-   cap : road-capacity factor
-   gap : following-distance factor (wet roads → longer headway)         */
+
 M.WEATHER = {
   sunny:      { key:'sunny',      label:'Sunny',      spd:1.00, cap:1.00, gap:1.00, icon:'☀', tint:null,      flood:0.00 },
   cloudy:     { key:'cloudy',     label:'Cloudy',     spd:0.95, cap:0.98, gap:1.03, icon:'☁', tint:null,      flood:0.00 },
@@ -36,10 +25,7 @@ M.WEATHER = {
   flooded:    { key:'flooded',    label:'Flooded',    spd:0.36, cap:0.44, gap:1.62, icon:'🌊', tint:'#1a3348', flood:0.34 }
 };
 
-/* ───────────────── road conditions ─────────────────
-   spd  : speed factor
-   cap  : capacity factor
-   lane : lanes physically removed                                       */
+
 M.RCOND = {
   good:        { key:'good',        label:'Good',            spd:1.00, cap:1.00, lane:0 },
   fair:        { key:'fair',        label:'Fair',            spd:0.92, cap:0.96, lane:0 },
@@ -50,7 +36,7 @@ M.RCOND = {
   flooded:     { key:'flooded',     label:'Flooded road',    spd:0.30, cap:0.34, lane:1 }
 };
 
-/* ───────────────── traffic level thresholds (v/c ratio) ───────────── */
+
 M.LEVELS = [
   { key:'LOW',       max:0.35, color:'#22c55e', cls:'lv-low'   },
   { key:'MEDIUM',    max:0.60, color:'#eab308', cls:'lv-med'   },
@@ -63,8 +49,7 @@ M.level = function (x) {
 };
 M.BLOCK_COLOR = '#a855f7';
 
-/* ───────────────── scenarios ─────────────────
-   group 'wx' entries drive the weather selector; others are incidents.  */
+
 M.SCENARIOS = [
   { key:'rush_hour',    label:'Rush Hour',            group:'demand', desc:'Demand ×1.9, heavier bus and jeepney share' },
   { key:'accident',     label:'Accident',             group:'inc',    desc:'A lane is closed at a random main-road location' },
@@ -85,13 +70,10 @@ M.SCENARIOS = [
   { key:'flooding',     label:'Flooding',             group:'wx', wx:'flooded',    desc:'Weather → Flooded; low roads near rivers close' }
 ];
 
-/* ───────────────── signal timing (seconds) ───────────────── */
+
 M.SIGNAL = { green:22, yellow:4, allred:2 };
 
-/* ───────────────── capacity model ─────────────────
-   Base capacity uses jam density: one lane holds a vehicle every
-   ~7 m (avg vehicle 5.4 m + 1.6 m minimum gap). Practical capacity is
-   taken at 78 % of jam storage so queues form before gridlock.          */
+
 M.JAM_SPACING = 7.0;
 M.PRACTICAL = 0.78;
 
@@ -99,7 +81,7 @@ M.baseCapacity = function (lengthM, lanes) {
   return Math.max(1, (lengthM / M.JAM_SPACING) * lanes * M.PRACTICAL);
 };
 
-/* effective capacity after weather + road condition + incident lane loss */
+
 M.effCapacity = function (seg, wx) {
   const rc = M.RCOND[seg.cond] || M.RCOND.good;
   const lanes = Math.max(0, seg.lanes - rc.lane - (seg.laneLoss || 0));
@@ -108,21 +90,20 @@ M.effCapacity = function (seg, wx) {
   return base * rc.cap * wx.cap;
 };
 
-/* effective free-flow speed (km/h) after weather + condition */
+
 M.effSpeed = function (seg, wx) {
   const rc = M.RCOND[seg.cond] || M.RCOND.good;
   return seg.speed * rc.spd * wx.spd * (seg.spdFactor || 1);
 };
 
-/* Greenshields-style speed–density relation, floored so traffic
-   still creeps instead of freezing completely.                          */
+
 M.densitySpeed = function (vFree, x) {
   if (x <= 0) return vFree;
   const f = Math.max(0.10, 1 - 0.92 * Math.pow(Math.min(x, 1.65), 1.35));
   return vFree * f;
 };
 
-/* ───────────────── geometry helpers ───────────────── */
+
 M.R_EARTH = 6371000;
 M.hav = function (a, b) {
   const p1 = a[0] * Math.PI / 180, p2 = b[0] * Math.PI / 180;
@@ -131,11 +112,11 @@ M.hav = function (a, b) {
   return 2 * M.R_EARTH * Math.asin(Math.sqrt(h));
 };
 
-/* metres-per-degree at San Miguel's latitude (≈15.15° N) */
+
 M.MPD_LAT = 110574;
 M.MPD_LON = 107630;
 
-/* interpolate a point at distance d (m) along a polyline of [lat,lon] */
+
 M.along = function (pts, cum, d) {
   const total = cum[cum.length - 1];
   if (d <= 0) return [pts[0][0], pts[0][1], M.bearing(pts[0], pts[1] || pts[0])];
@@ -163,12 +144,12 @@ M.cumulative = function (pts) {
   return c;
 };
 
-/* ───────────────── small utilities ───────────────── */
+
 M.clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 M.fmt = (v, d = 1) => (isFinite(v) ? v.toFixed(d) : '—');
 M.pick = (arr, rng) => arr[Math.floor((rng ? rng() : Math.random()) * arr.length)];
 
-/* seeded RNG (mulberry32) — keeps scenario comparisons reproducible */
+
 M.rng = function (seed) {
   let s = seed >>> 0;
   return function () {
@@ -179,7 +160,7 @@ M.rng = function (seed) {
   };
 };
 
-/* weighted vehicle-type sampling */
+
 M.sampleType = function (rng, weights) {
   const w = weights || null;
   let total = 0;
@@ -194,7 +175,7 @@ M.sampleType = function (rng, weights) {
   return 'car';
 };
 
-/* time-of-day demand multiplier — twin peaks, school + work driven */
+
 M.demandCurve = function (hour) {
   const peaks = [[6.7, 1.00, 1.15], [12.2, 0.42, 0.95], [17.3, 0.92, 1.35]];
   let m = 0.30;

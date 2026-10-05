@@ -1,8 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════════
-   sim.js — directed-network traffic simulation engine
-   Vehicles move only in each segment's assigned direction, follow
-   signals, queue behind incidents, and re-route around blockages.
-   ═══════════════════════════════════════════════════════════════════ */
+
 'use strict';
 
 class Sim {
@@ -16,12 +12,12 @@ class Sim {
     this.weather = 'sunny';
     this.demand = 120;
     this.scenarios = new Set();
-    this.startTime = 6 * 3600; // configurable simulation start time
+    this.startTime = 6 * 3600; 
     this.time = this.startTime;
-    this.runDuration = 30 * 60; // configurable timer duration in simulation seconds
+    this.runDuration = 30 * 60; 
     this.runElapsed = 0;
     this.timerEnabled = true;
-    this.dt = 0.6;             // seconds per tick
+    this.dt = 0.6;             
     this.running = false;
     this.tick = 0;
     this.useClockDemand = false;
@@ -50,7 +46,7 @@ class Sim {
     this.lastLoggedLevel = this.stats.level.key;
   }
 
-  /* ───────────────────────────────────────────── activity history */
+  
   logEvent(category, title, detail, location = '') {
     const allowed = new Set(['traffic', 'weather', 'incident', 'system', 'location']);
     const cat = allowed.has(category) ? category : 'system';
@@ -72,7 +68,7 @@ class Sim {
     return loc ? loc.name : sc.at;
   }
 
-  /* ────────────────────────────────────────────── graph construction */
+  
   buildGraph() {
     const net = this.net;
     this.nodes = net.nodes;
@@ -92,12 +88,12 @@ class Sim {
     this.byId = {};
     this.segs.forEach(s => { this.byId[s.id] = s; });
 
-    // outgoing adjacency (directed!)
+    
     this.out = Array.from({ length: this.nodes.length }, () => []);
     this.inn = Array.from({ length: this.nodes.length }, () => []);
     this.segs.forEach(s => { this.out[s.a].push(s.idx); this.inn[s.b].push(s.idx); });
 
-    // reverse-twin lookup (to avoid U-turns on dual carriageways)
+    
     this.twin = new Array(this.segs.length).fill(-1);
     const key = new Map();
     this.segs.forEach(s => key.set(s.a + '_' + s.b, s.idx));
@@ -106,7 +102,7 @@ class Sim {
       if (t != null) this.twin[s.idx] = t;
     });
 
-    // location zone maps
+    
     this.locs = net.locations.map(L => ({
       ...L,
       zoneIdx: L.zone.map(id => this.byId[id]).filter(Boolean).map(s => s.idx),
@@ -114,7 +110,7 @@ class Sim {
       stats: { count: 0, speed: 0, x: 0, level: M.LEVELS[0], delay: 0, waiting: 0 }
     }));
 
-    // flood-risk: segments close to a river/stream get flooded first
+    
     this.floodRank = this.segs.map(s => {
       let best = 1e9;
       const mid = s.pts[Math.floor(s.pts.length / 2)];
@@ -129,10 +125,10 @@ class Sim {
     this.floodOrder = this.segs.map((s, i) => i)
       .sort((p, q) => this.floodRank[p] - this.floodRank[q]);
 
-    // network totals
+    
     this.totalLenKm = this.segs.reduce((a, s) => a + s.len, 0) / 1000;
 
-    // bus stops → attach to segments
+    
     (net.busstops || []).forEach(b => {
       const s = this.byId[b.seg];
       if (!s) return;
@@ -150,7 +146,7 @@ class Sim {
     return best;
   }
 
-  /* ────────────────────────────────────────────────────── signals */
+  
   initSignals() {
     this.signals = (this.net.signals || []).map(sg => {
       const phases = sg.phases.map(ids => ids.map(id => this.byId[id]).filter(Boolean).map(s => s.idx));
@@ -167,11 +163,11 @@ class Sim {
   stepSignals(dt) {
     const fault = this.scenarios.has('signal_fault');
     for (const sg of this.signals) {
-      // Camias faults first; other junctions fault only if they are the Camias one
+      
       const isFaulted = fault && (sg.loc === 'camias');
       sg.fault = isFaulted;
       if (isFaulted) {
-        // flashing fault: everything treated as give-way / all-red alternation
+        
         sg.t += dt;
         if (sg.t > 3) { sg.t = 0; sg.state = sg.state === 'red' ? 'yellow' : 'red'; }
         continue;
@@ -188,7 +184,7 @@ class Sim {
     }
   }
 
-  /* what a vehicle on segment i sees at the downstream stop line */
+  
   signalFor(segIdx) {
     const s = this.segs[segIdx];
     const sg = s.signalNode;
@@ -201,13 +197,13 @@ class Sim {
     return { sig: sg, light: 'red' };
   }
 
-  /* ──────────────────────────────────── conditions & incidents */
+  
   applyConditions() {
     const S = this.scenarios;
     const rng = M.rng(this.rngSeed + 77);
     const wx = M.WEATHER[this.weather];
 
-    // reset
+    
     this.segs.forEach(s => {
       s.cond = 'good'; s.laneLoss = 0; s.spdFactor = 1; s.floodDepth = 0;
       s.blocked = false; s.incident = null; s.stopped = null;
@@ -221,7 +217,7 @@ class Sim {
       if (opts.laneLoss) s.laneLoss = Math.max(s.laneLoss, opts.laneLoss);
       if (opts.spdFactor) s.spdFactor = Math.min(s.spdFactor, opts.spdFactor);
       if (opts.blocked) s.blocked = true;
-      // stopped obstruction position along the segment
+      
       if (opts.stopAt != null) {
         s.stopped = s.stopped || [];
         s.stopped.push({ d: opts.stopAt * s.len, type: type });
@@ -237,7 +233,7 @@ class Sim {
       this.incidents.push(inc);
     };
 
-    // ── location-specific scenarios ──────────────────────────
+    
     const loc = id => this.locs.find(l => l.id === id);
 
     if (S.has('double_park')) {
@@ -293,7 +289,7 @@ class Sim {
         { spdFactor: 0.78, loc: 'camias' });
     }
 
-    // ── generic incidents ────────────────────────────────────
+    
     if (S.has('accident')) {
       const source = this.localTestMode && this.testLocationId ? this.testLocation().mainIdx : mains;
       const pool = source.filter(i => !this.segs[i].incident && this.segs[i].len > 60);
@@ -338,7 +334,7 @@ class Sim {
       }
     }
 
-    // ── weather-driven flooding (lowest / river-adjacent roads first) ──
+    
     if (wx.flood > 0) {
       const floodPool = this.localTestMode && this.testLocationId
         ? this.testLocation().zoneIdx.slice().sort((a, b) => this.floodRank[a] - this.floodRank[b])
@@ -353,7 +349,7 @@ class Sim {
         const risk = M.clamp(1 - this.floodRank[si] / 500, 0, 1);
         s.floodDepth = Math.max(0.08, wx.flood * (0.55 + 0.75 * risk));
         applied++;
-        // deepest flooding fully closes a few minor roads
+        
         if (wx.flood >= 0.30 && applied % 5 === 0 && s.rank <= 2) {
           s.blocked = true;
           const p = M.along(s.pts, s.cum, s.len * 0.5);
@@ -367,8 +363,8 @@ class Sim {
       }
     }
 
-    // guarantee the network stays traversable: never block so much that
-    // a vehicle has no legal exit from a node
+    
+    
     this.ensureExits();
     this.buildRouteCache();
     this.routeVersion++;
@@ -380,7 +376,7 @@ class Sim {
       if (!outs.length) continue;
       const open = outs.filter(i => !this.segs[i].blocked);
       if (open.length === 0) {
-        // reopen the highest-class exit so vehicles are never trapped
+        
         let best = outs[0];
         for (const i of outs) if (this.segs[i].rank > this.segs[best].rank) best = i;
         const s = this.segs[best];
@@ -392,21 +388,21 @@ class Sim {
     }
   }
 
-  /* ─────────────────────────── routing (turn-by-turn, legal only) */
+  
   buildRouteCache() { this.routeCache = new Map(); }
 
   roadAllowed(v, seg) {
     if (!seg || seg.blocked) return false;
-    // Focused testing is a hard simulation boundary: vehicles may not leave
-    // the selected location's road zone. This prevents traffic dots from
-    // spreading across the whole network after the test starts.
+    
+    
+    
     if (this.localTestMode && this.testLocationId && this.testZoneSet.size && !this.testZoneSet.has(seg.idx)) return false;
     const T = v && v.t;
     if (seg.cond === 'flooded' && T && seg.floodDepth > (T.maxFlood || 0.2)) return false;
     return true;
   }
 
-  /* Dijkstra routing: distance + congestion + road condition + flood risk. */
+  
   chooseNext(seg, dest, vehicle) {
     const node = seg.b;
     const key = node + '>' + dest + ':' + this.routeVersion;
@@ -460,13 +456,13 @@ class Sim {
   }
 
   randomNode() {
-    // In focused mode, keep trip destinations inside the selected location zone.
+    
     const pool = this.testSegmentPool();
     if (this.localTestMode && this.testLocationId && pool.length) {
       const s = pool[Math.floor(this.rng() * pool.length)];
       return s.b;
     }
-    // prefer nodes on higher-class roads as trip ends
+    
     for (let k = 0; k < 12; k++) {
       const i = Math.floor(this.rng() * this.segs.length);
       if (this.segs[i].rank >= 3) return this.segs[i].b;
@@ -474,7 +470,7 @@ class Sim {
     return Math.floor(this.rng() * this.nodes.length);
   }
 
-  /* ─────────────────────────────────────────────── vehicle fleet */
+  
   fleetWeights() {
     if (this.scenarios.has('rush_hour')) {
       return { motorcycle:0.32, car:0.33, tricycle:0.13, jeepney:0.11, bus:0.055, truck:0.05, emergency:0.005 };
@@ -493,7 +489,7 @@ class Sim {
     const w = this.fleetWeights();
     const tk = M.sampleType(this.rng, w);
     const T = M.VTYPES[tk];
-    // spawn on a road with spare room
+    
     let seg = null;
     const spawnPool = this.testSegmentPool();
     for (let k = 0; k < 30; k++) {
@@ -527,7 +523,7 @@ class Sim {
   place(v) {
     const s = this.segs[v.seg];
     const p = M.along(s.pts, s.cum, v.d);
-    // lateral offset so opposing carriageways don't overlap visually
+    
     const off = s.dual ? 0.000018 : 0.0000075;
     const rad = (p[2] + 90) * Math.PI / 180;
     v.lat = p[0] + Math.cos(rad) * off;
@@ -554,7 +550,7 @@ class Sim {
     }
   }
 
-  /* ───────────────────────────────────────────────── main step */
+  
   step(dtOverride) {
     const dt = dtOverride || this.dt;
     const wx = M.WEATHER[this.weather];
@@ -562,17 +558,17 @@ class Sim {
     this.runElapsed += Math.max(0, dt);
     this.tick++;
 
-    // Capacities only change when weather/scenarios change; do not recompute all 808 roads every tick.
+    
     this.stepSignals(dt);
     if (this.tick % 25 === 0) { this.routeVersion++; this.routeCache.clear(); }
 
-    // enforcer: periodically halts its approach (~35 s hold every 90 s)
+    
     this.enforcerHold = false;
     if (this.enforcerSeg != null) {
       this.enforcerHold = (this.time % 90) < 32;
     }
 
-    // maintain fleet size
+    
     const target = this.targetCount();
     let diff = target - this.vehicles.length;
     if (diff > 0) for (let i = 0; i < Math.min(diff, 6); i++) this.spawn();
@@ -586,14 +582,14 @@ class Sim {
       }
     }
 
-    // sort each segment's vehicles by position (leader last)
+    
     for (const s of this.segs) {
       if (s.vehicles.length > 1) s.vehicles.sort((a, b) => a.d - b.d);
     }
 
-    // ── per-vehicle IDM update ──
+    
     for (const s of this.segs) {
-      const vFree = s.freeSpeed / 3.6;                 // m/s
+      const vFree = s.freeSpeed / 3.6;                 
       const x = s.count / Math.max(1, s.capNow);
       const vTarget = M.densitySpeed(vFree, x);
       const list = s.vehicles;
@@ -608,7 +604,7 @@ class Sim {
         const s0 = 1.6 + T.len * 0.28;
         const Tgap = 1.05 * gapFactor;
 
-        // leader = next vehicle ahead on this segment
+        
         let gap = Infinity, dv = 0;
         const lead = list[i + 1];
         if (lead) {
@@ -616,7 +612,7 @@ class Sim {
           dv = v.v - lead.v;
         }
 
-        // static obstruction ahead (double-parked / stopped bus / debris)
+        
         if (s.stopped) {
           for (const st of s.stopped) {
             const g = st.d - v.d;
@@ -624,7 +620,7 @@ class Sim {
           }
         }
 
-        // downstream constraint at the end of the segment
+        
         const distEnd = s.len - v.d;
         let mustStop = false;
         const sigInfo = this.signalFor(s.idx);
@@ -632,12 +628,12 @@ class Sim {
           const L = sigInfo.light;
           if (L === 'red') mustStop = !(v.violator && this.scenarios.has('violation'));
           else if (L === 'yellow') mustStop = distEnd > 12 && !(v.violator && this.scenarios.has('violation'));
-          else if (L === 'fault') mustStop = (v.id % 3 !== 0) && distEnd < 26; // hesitant give-way
+          else if (L === 'fault') mustStop = (v.id % 3 !== 0) && distEnd < 26; 
           if (v.type === 'emergency') mustStop = false;
         }
         if (this.enforcerHold && s.idx === this.enforcerSeg && v.type !== 'emergency') mustStop = true;
 
-        // next-segment spillback: don't enter a full road
+        
         let nextFull = false;
         if (!mustStop && distEnd < 42) {
           const ni = v.next != null ? v.next : (v.next = this.chooseNext(s, v.dest, v));
@@ -653,7 +649,7 @@ class Sim {
           if (stopGap < gap) { gap = Math.max(0.05, stopGap); dv = v.v; }
         }
 
-        // IDM acceleration
+        
         const sStar = s0 + Math.max(0, v.v * Tgap + (v.v * dv) / (2 * Math.sqrt(T.acc * T.dec)));
         let acc = T.acc * (1 - Math.pow(v.v / v0, 4) - Math.pow(sStar / Math.max(0.6, gap), 2));
         acc = M.clamp(acc, -T.dec * 2.4, T.acc);
@@ -661,7 +657,7 @@ class Sim {
         v.v = Math.max(0, v.v + acc * dt);
         if (gap < 0.9) v.v = 0;
 
-        // bus dwell at stops
+        
         if ((v.type === 'bus' || v.type === 'jeepney') && s.stops.length && this.scenarios.has('busstop')) {
           for (const st of s.stops) {
             if (Math.abs(v.d - st.d) < 6 && v.dwell <= 0 && !v.dwelled) {
@@ -682,14 +678,14 @@ class Sim {
       }
     }
 
-    // ── segment transitions ──
+    
     for (const s of this.segs) {
       for (let i = s.vehicles.length - 1; i >= 0; i--) {
         const v = s.vehicles[i];
         if (v.d < s.len) continue;
-        // reached the end node — decide the next legal segment
+        
         if (v.seg !== undefined && s.b === v.dest) {
-          // arrived: log trip, assign a new destination and continue
+          
           this.completed++;
           this.totalTrips++;
           this.totalDelay += Math.max(0, v.travel - v.freeTravel);
@@ -700,7 +696,7 @@ class Sim {
         if (ni == null || !this.roadAllowed(v, this.segs[ni])) ni = this.chooseNext(s, v.dest, v);
         if (ni == null) { v.d = s.len - 0.5; v.v = 0; continue; }
         const nx = this.segs[ni];
-        // hard spillback guard: wait at the stop line rather than teleport
+        
         if (!this.roadAllowed(v, nx)) { v.next = null; v.d = Math.max(0, s.len - 1.0); v.v = 0; v.wait += dt; continue; }
         if (nx.count >= nx.capNow * 1.25) {
           v.d = Math.max(0, s.len - 1.0);
@@ -718,9 +714,9 @@ class Sim {
     this.refreshSegments();
     if (this.tick % 25 === 0) this.pushHistory();
 
-    // Lightweight activity logging: one summary per simulated minute.
-    // This is intentionally event-based so the history panel does not add
-    // per-frame rendering or storage work.
+    
+    
+    
     const activityMinute = Math.floor(this.runElapsed / 60);
     if (activityMinute !== this.lastActivityMinute) {
       this.lastActivityMinute = activityMinute;
@@ -734,7 +730,7 @@ class Sim {
     }
   }
 
-  /* ─────────────────────────────────── per-segment aggregation */
+  
   refreshSegments() {
     for (const s of this.segs) {
       s.count = s.vehicles.length;
@@ -748,7 +744,7 @@ class Sim {
     }
   }
 
-  /* ───────────────────────────────────────── global statistics */
+  
   computeStats() {
     const n = this.vehicles.length;
     let spd = 0, waiting = 0, wsum = 0;
@@ -769,7 +765,7 @@ class Sim {
     }
     const freeAvg = lenSum ? freeSum / lenSum : 40;
 
-    // network travel time for a nominal 3 km trip
+    
     const tripKm = 3;
     const tActual = avgSpeed > 0.5 ? (tripKm / avgSpeed) * 60 : 99;
     const tFree = (tripKm / Math.max(5, freeAvg)) * 60;
@@ -801,7 +797,7 @@ class Sim {
       segCount: this.segs.length
     };
 
-    // per-location statistics
+    
     for (const L of this.locs) {
       let c = 0, sp = 0, cap = 0, occ = 0, w = 0, inc = 0, blocked = 0;
       for (const si of L.zoneIdx) {
@@ -837,7 +833,7 @@ class Sim {
     if (this.history.length > 160) this.history.shift();
   }
 
-  /* ─────────────────────────────────────────────── public API */
+  
   setTestLocation(id, localMode = true) {
     this.testLocationId = id || '';
     this.localTestMode = !!localMode && !!this.testLocationId;
@@ -878,7 +874,7 @@ class Sim {
     const sc = M.SCENARIOS.find(s => s.key === k);
     if (!sc) return;
     if (sc.group === 'wx') {
-      // weather scenarios are mutually exclusive
+      
       M.SCENARIOS.filter(s => s.group === 'wx').forEach(s => { if (s.key !== k) this.scenarios.delete(s.key); });
       if (this.scenarios.has(k)) { this.scenarios.delete(k); this.weather = 'sunny'; }
       else { this.scenarios.add(k); this.weather = sc.wx; }
@@ -954,7 +950,7 @@ class Sim {
     return String(Math.floor(t / 3600)).padStart(2, '0') + ':' + String(Math.floor((t % 3600) / 60)).padStart(2, '0');
   }
 
-  /* run N steps headlessly (used by scenario presets) */
+  
   runSteps(n, dt) {
     for (let i = 0; i < n; i++) this.step(dt || this.dt);
     return this.computeStats();

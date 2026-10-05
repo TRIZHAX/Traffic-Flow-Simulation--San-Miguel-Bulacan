@@ -12,7 +12,7 @@
 
 <div id="app">
 
-  <!-- ══════════ HEADER ══════════ -->
+  
   <header id="topbar">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">
@@ -57,10 +57,10 @@
     </div>
   </header>
 
-  <!-- ══════════ MAIN ══════════ -->
+  
   <main id="main">
 
-    <!-- LEFT: controls -->
+    
     <aside id="side" class="panel">
       <nav class="tabs" role="tablist">
         <button class="tab is-on" data-tab="control" role="tab">Control</button>
@@ -70,7 +70,7 @@
         <button class="tab" data-tab="about" role="tab">Model</button>
       </nav>
 
-      <!-- ── CONTROL TAB ── -->
+      
       <section class="tabpane is-on" data-pane="control">
 
         <div class="block">
@@ -143,7 +143,7 @@
 
         <div class="block">
           <h2>Scenarios <small id="scnCount">0 active</small></h2>
-          <div class="chips" id="scnChips"><!-- injected --></div>
+          <div class="chips" id="scnChips"></div>
           <button id="btnClearScn" class="btn btn-wide">Clear all scenarios</button>
         </div>
 
@@ -168,7 +168,7 @@
 
         <div class="block">
           <h2>Traffic locations</h2>
-          <div class="locs" id="locList"><!-- injected --></div>
+          <div class="locs" id="locList"></div>
         </div>
 
         <div class="block">
@@ -195,11 +195,11 @@
         </div>
       </section>
 
-      <!-- ── ANALYTICS TAB ── -->
+      
       <section class="tabpane" data-pane="analytics">
         <div class="block">
           <h2>Network analytics</h2>
-          <div class="kpi-grid" id="kpiGrid"><!-- injected --></div>
+          <div class="kpi-grid" id="kpiGrid"></div>
         </div>
         <div class="block">
           <h2>Average speed history</h2>
@@ -208,15 +208,15 @@
         </div>
         <div class="block">
           <h2>Location statistics</h2>
-          <div class="loc-stats" id="locStats"><!-- injected --></div>
+          <div class="loc-stats" id="locStats"></div>
         </div>
         <div class="block">
           <h2>Active incidents</h2>
-          <div class="incidents" id="incList"><!-- injected --></div>
+          <div class="incidents" id="incList"></div>
         </div>
       </section>
 
-      <!-- ── HISTORY TAB ── -->
+      
       <section class="tabpane" data-pane="history">
         <div class="block history-head">
           <div class="history-title-row">
@@ -236,14 +236,14 @@
           </div>
         </div>
         <div class="block history-status">
-          <div class="history-status-grid" id="historyStatus"><!-- injected --></div>
+          <div class="history-status-grid" id="historyStatus"></div>
         </div>
         <div class="block history-list-block">
-          <div class="history-list" id="historyList" aria-live="polite"><!-- injected --></div>
+          <div class="history-list" id="historyList" aria-live="polite"></div>
         </div>
       </section>
 
-      <!-- ── COMPARE TAB ── -->
+      
       <section class="tabpane" data-pane="compare">
         <div class="block">
           <h2>Scenario comparison</h2>
@@ -257,12 +257,12 @@
         </div>
         <div class="block">
           <h2>Preset experiments</h2>
-          <div class="presets" id="presetList"><!-- injected --></div>
+          <div class="presets" id="presetList"></div>
           <div class="mini-note">A preset runs the baseline and the variant for a fixed number of simulation steps each, then reports the difference.</div>
         </div>
       </section>
 
-      <!-- ── MODEL TAB ── -->
+      
       <section class="tabpane" data-pane="about">
         <div class="block">
           <h2>Computational model</h2>
@@ -308,7 +308,7 @@
         </div>
         <div class="block">
           <h2>Network</h2>
-          <div class="net-meta" id="netMeta"><!-- injected --></div>
+          <div class="net-meta" id="netMeta"></div>
         </div>
         <div class="block">
           <h2>Data source</h2>
@@ -320,13 +320,13 @@
       </section>
     </aside>
 
-    <!-- RIGHT: map -->
+    
     <div id="mapwrap">
       <div id="map"></div>
 
       <div id="loading"><div class="spin"></div><span>Loading San Miguel road network…</span></div>
 
-      <!-- floating legend -->
+      
       <div id="legend" class="glass">
         <div class="lg-title">Traffic level</div>
         <div class="lg-row"><i class="sw lv-low"></i>LOW</div>
@@ -337,10 +337,10 @@
         <div class="lg-row"><i class="sw sw-block"></i>Blocked / impassable</div>
       </div>
 
-      <!-- weather badge -->
+      
       <div id="wxBadge" class="glass"><span id="wxIcon">&#9728;</span><span id="wxName">Sunny</span></div>
 
-      <!-- selected road / location inspector -->
+      
       <div id="vehicleLegend" class="glass">
         <div class="lg-title">Vehicles</div>
         <div class="veh-lg"><i class="vlg-dot motorcycle"></i>Motorcycle <i class="vlg-dot car"></i>Car</div>
@@ -354,7 +354,7 @@
         <div id="inspBody"></div>
       </div>
 
-      <!-- mobile quick bar -->
+      
       <div id="mobbar">
         <button class="mb" data-mb="control">Control</button>
         <button class="mb" data-mb="analytics">Analytics</button>
