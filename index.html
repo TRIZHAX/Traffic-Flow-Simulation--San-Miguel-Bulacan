@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.4, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Traffic Flow Simulation — San Miguel, Bulacan</title>
 <meta name="description" content="Computational traffic-flow simulation of San Miguel, Bulacan on the real OpenStreetMap road network with one-way directional segments.">
 <link rel="stylesheet" href="vendor/leaflet.css">
@@ -41,12 +41,16 @@
         <input type="range" id="simSpeed" min="1" max="8" step="1" value="3">
         <b id="simSpeedTxt">3&times;</b>
       </label>
+      <div class="timer-chip" id="timerChip" title="Remaining simulation run time">
+        <small>Run timer</small><b id="simTimer">30:00</b>
+      </div>
     </div>
 
     <div class="topbar-right">
       <div class="stat-chip"><small>Vehicles</small><b id="hVeh">0</b></div>
       <div class="stat-chip"><small>Avg speed</small><b id="hSpd">0</b></div>
       <div class="stat-chip"><small>Network</small><b id="hLos">LOW</b></div>
+      <div class="stat-chip fps-chip" id="fpsChip" title="Live browser rendering performance"><small>FPS</small><b id="hFps">--</b><span id="fpsStatus">Checking</span></div>
       <button id="btnPresentation" class="btn btn-icon" title="Presentation mode">&#9635;</button>
       <button id="btnTheme" class="btn btn-icon" title="Toggle interface theme">☼</button>
       <button id="btnPanel" class="btn btn-icon" title="Show/hide control panel">&#9776;</button>
@@ -61,6 +65,7 @@
       <nav class="tabs" role="tablist">
         <button class="tab is-on" data-tab="control" role="tab">Control</button>
         <button class="tab" data-tab="analytics" role="tab">Analytics</button>
+        <button class="tab" data-tab="history" role="tab">History</button>
         <button class="tab" data-tab="compare" role="tab">Compare</button>
         <button class="tab" data-tab="about" role="tab">Model</button>
       </nav>
@@ -80,6 +85,44 @@
             <button class="profile-btn" data-profile="rush">Rush hour</button>
           </div>
           <div class="mini-note" id="demandNote">Total vehicles injected into the one-way network.</div>
+        </div>
+
+        <div class="block">
+          <h2>Simulation timer</h2>
+          <div class="timer-grid timer-duration-grid">
+            <label class="location-select">
+              <span>Hours</span>
+              <input id="runHours" type="number" min="0" max="24" step="1" value="0" inputmode="numeric">
+            </label>
+            <label class="location-select">
+              <span>Minutes</span>
+              <input id="runMinutes" type="number" min="0" max="59" step="1" value="30" inputmode="numeric">
+            </label>
+            <label class="location-select">
+              <span>Seconds</span>
+              <input id="runSeconds" type="number" min="0" max="59" step="1" value="0" inputmode="numeric">
+            </label>
+          </div>
+          <div class="timer-grid timer-start-grid">
+            <label class="location-select">
+              <span>Simulation start time</span>
+              <input id="simStartTime" type="time" value="06:00">
+            </label>
+            <button id="btnApplyTimer" class="btn timer-apply" type="button">Apply timer</button>
+          </div>
+          <div class="timer-presets" aria-label="Timer presets">
+            <span>Quick:</span>
+            <button type="button" data-timer-min="5">5 min</button>
+            <button type="button" data-timer-min="15">15 min</button>
+            <button type="button" data-timer-min="30">30 min</button>
+            <button type="button" data-timer-min="60">1 hour</button>
+            <button type="button" data-timer-min="120">2 hours</button>
+          </div>
+          <label class="test-scope timer-enable">
+            <input type="checkbox" id="timerEnabled" checked>
+            <span><b>Stop automatically when timer ends</b><small>Speed changes how fast simulation time passes.</small></span>
+          </label>
+          <div class="mini-note" id="timerNote">Set any duration from 1 second up to 24 hours. Example: 0h 30m 0s.</div>
         </div>
 
         <div class="block">
@@ -129,10 +172,19 @@
         </div>
 
         <div class="block">
+          <h2>Performance mode <small id="perfModeNote">Balanced</small></h2>
+          <div class="perf-modes" id="perfModes" role="group" aria-label="Performance mode">
+            <button class="perf-btn is-on" data-perf="normal" title="Full visual quality">Normal</button>
+            <button class="perf-btn" data-perf="performance" title="Reduce decorative animation and refresh work">Performance</button>
+            <button class="perf-btn" data-perf="ultra" title="Maximum FPS: disable weather animation and nonessential overlays">Ultra</button>
+          </div>
+          <div class="mini-note" id="perfModeDesc">Full visuals with optimized rendering.</div>
+        </div>
+
+        <div class="block">
           <h2>Map layers</h2>
           <div class="toggles" id="layerToggles">
             <label><input type="checkbox" id="tgVeh" checked><span>Vehicles</span></label>
-            <label><input type="checkbox" id="tgArrow" checked><span>Direction arrows</span></label>
             <label><input type="checkbox" id="tgTraffic" checked><span>Traffic colours</span></label>
             <label><input type="checkbox" id="tgSignal" checked><span>Traffic lights</span></label>
             <label><input type="checkbox" id="tgIncident" checked><span>Incidents</span></label>
@@ -161,6 +213,33 @@
         <div class="block">
           <h2>Active incidents</h2>
           <div class="incidents" id="incList"><!-- injected --></div>
+        </div>
+      </section>
+
+      <!-- ── HISTORY TAB ── -->
+      <section class="tabpane" data-pane="history">
+        <div class="block history-head">
+          <div class="history-title-row">
+            <div>
+              <h2>San Miguel activity history</h2>
+              <p class="mini-note">A chronological log of events produced by this traffic simulation. It is <b>simulation data</b>, not live emergency or news reports.</p>
+            </div>
+            <button id="btnClearHistory" class="btn sm" type="button">Clear</button>
+          </div>
+          <div class="history-filters" id="historyFilters" role="group" aria-label="History filter">
+            <button class="history-filter is-on" data-history-filter="all">All</button>
+            <button class="history-filter" data-history-filter="traffic">Traffic</button>
+            <button class="history-filter" data-history-filter="weather">Weather</button>
+            <button class="history-filter" data-history-filter="incident">Incidents</button>
+            <button class="history-filter" data-history-filter="location">Location</button>
+            <button class="history-filter" data-history-filter="system">System</button>
+          </div>
+        </div>
+        <div class="block history-status">
+          <div class="history-status-grid" id="historyStatus"><!-- injected --></div>
+        </div>
+        <div class="block history-list-block">
+          <div class="history-list" id="historyList" aria-live="polite"><!-- injected --></div>
         </div>
       </section>
 
@@ -256,7 +335,6 @@
         <div class="lg-row"><i class="sw lv-vhigh"></i>VERY HIGH</div>
         <div class="lg-sep"></div>
         <div class="lg-row"><i class="sw sw-block"></i>Blocked / impassable</div>
-        <div class="lg-row"><i class="sw sw-arrow">&#9656;</i>One-way direction</div>
       </div>
 
       <!-- weather badge -->
@@ -280,6 +358,7 @@
       <div id="mobbar">
         <button class="mb" data-mb="control">Control</button>
         <button class="mb" data-mb="analytics">Analytics</button>
+        <button class="mb" data-mb="history">History</button>
         <button class="mb" data-mb="compare">Compare</button>
       </div>
     </div>
