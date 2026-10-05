@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    mapview.js — Leaflet real-map rendering: roads coloured by traffic
-   level, one-way arrows, vehicles, signals, incidents, landmarks.
+   level, vehicles, signals, incidents, landmarks.
    ═══════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -9,8 +9,14 @@ class MapView {
     this.sim = sim;
     this.onSelect = opts.onSelect || (() => {});
     this.show = {
-      veh: true, arrow: true, traffic: true, signal: true,
+      veh: true, traffic: true, signal: true,
       incident: true, lm: true, water: true, label: false
+    };
+    this.performanceMode = 'normal';
+    this.performanceProfile = {
+      normal:      { vehicleMs: 33, roadMs: 120, uiMs: 250, weather: true,  weatherMs: 33 },
+      performance: { vehicleMs: 42, roadMs: 180, uiMs: 400, weather: false, weatherMs: 0  },
+      ultra:       { vehicleMs: 66, roadMs: 300, uiMs: 700, weather: false, weatherMs: 0  }
     };
     this.selected = null;
     this.focusFilterActive = false;
@@ -26,8 +32,14 @@ class MapView {
     this.map = L.map('map', {
       zoomControl: true,
       attributionControl: true,
-      preferCanvas: true,
+      // Use SVG for the static road network. Leaflet can move the SVG pane with
+      // a single transform while panning instead of repainting an 808-path
+      // canvas on every pointer-move. Vehicles/weather use their own canvases.
+      preferCanvas: false,
       zoomSnap: 0.5,
+      zoomAnimation: false,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
       minZoom: 12,
       maxZoom: 18,
       maxBounds: L.latLngBounds([bb[0] - 0.05, bb[1] - 0.05], [bb[2] + 0.05, bb[3] + 0.05]),
@@ -43,33 +55,36 @@ class MapView {
     pane('pWater', 390);
     pane('pRoadCase', 400);
     pane('pRoad', 410);
-    pane('pArrow', 420);
     pane('pVeh', 440);
     pane('pMark', 620);
     pane('pLabel', 610);
     this.map.getPane('pRef').style.pointerEvents = 'none';
-    this.map.getPane('pArrow').style.pointerEvents = 'none';
     this.map.getPane('pVeh').style.pointerEvents = 'none';
     this.map.getPane('pLabel').style.pointerEvents = 'none';
 
     const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
     this.base = L.tileLayer(ESRI + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 18, maxNativeZoom: 17,
+      maxZoom: 18, maxNativeZoom: 17, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 1,
       attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &middot; ' +
                    'road network &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)'
     }).addTo(this.map);
 
     
     this.baseRef = L.tileLayer(ESRI + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-      pane: 'pRef', maxZoom: 18, maxNativeZoom: 17, attribution: ''
+      pane: 'pRef', maxZoom: 18, maxNativeZoom: 17, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 1, attribution: ''
     }).addTo(this.map);
+
+    // Shared SVG renderers keep static geometry in a single DOM tree. This is
+    // considerably cheaper to pan than Leaflet's Canvas renderer for this
+    // network size because the browser can transform the SVG pane as a unit.
+    this.roadRenderer = L.svg({ padding: 0.05 });
+    this.waterRenderer = L.svg({ padding: 0.05 });
 
     this.map.fitBounds(L.latLngBounds([bb[0], bb[1]], [bb[2], bb[3]]), { padding: [16, 16] });
 
     this.gWater   = L.layerGroup([], { pane: 'pWater' }).addTo(this.map);
     this.gCase    = L.layerGroup([], { pane: 'pRoadCase' }).addTo(this.map);
     this.gRoad    = L.layerGroup([], { pane: 'pRoad' }).addTo(this.map);
-    this.gArrow   = L.layerGroup([], { pane: 'pArrow' }).addTo(this.map);
     this.gLm      = L.layerGroup([], { pane: 'pMark' }).addTo(this.map);
     this.gLoc     = L.layerGroup([], { pane: 'pMark' }).addTo(this.map);
     this.gSig     = L.layerGroup([], { pane: 'pMark' }).addTo(this.map);
@@ -112,7 +127,7 @@ class MapView {
         c.style.pointerEvents = 'none';
         c.style.zIndex = 435;
         const size = map.getSize();
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(1.5, window.devicePixelRatio || 1);
         c.width = size.x * dpr; c.height = size.y * dpr;
         c.style.width = size.x + 'px'; c.style.height = size.y + 'px';
         map.getPanes().overlayPane.appendChild(c);
@@ -184,6 +199,7 @@ class MapView {
       }
       this.gWater.clearLayers();
       for (const w of this.sim.net.water) L.polyline(w.pts, {
+        renderer: this.waterRenderer,
         pane: 'pWater', color: '#1e4c66', weight: w.w === 'river' ? 3.4 : 1.9,
         opacity: 0.75, interactive: false, lineJoin: 'round'
       }).addTo(this.gWater);
@@ -210,7 +226,6 @@ class MapView {
         }).addTo(this.gWater);
       }
     }
-    this.drawArrows();
     this.drawLandmarks();
     this.drawLocations();
     this.drawSignals();
@@ -226,6 +241,7 @@ class MapView {
     // rivers / streams
     for (const w of sim.net.water) {
       L.polyline(w.pts, {
+        renderer: this.waterRenderer,
         pane: 'pWater', color: '#1e4c66', weight: w.w === 'river' ? 3.4 : 1.9,
         opacity: 0.75, interactive: false, lineJoin: 'round'
       }).addTo(this.gWater);
@@ -239,10 +255,12 @@ class MapView {
       const wCase = this.caseWeight(s, z);
       const wLine = this.lineWeight(s, z);
       const cs = L.polyline(s.pts, {
+        renderer: this.roadRenderer,
         pane: 'pRoadCase', color: '#0a1017', weight: wCase, opacity: 0.9,
         lineCap: 'round', lineJoin: 'round', interactive: false
       }).addTo(this.gCase);
       const ln = L.polyline(s.pts, {
+        renderer: this.roadRenderer,
         pane: 'pRoad', color: s.level.color, weight: wLine, opacity: 0.95,
         lineCap: 'round', lineJoin: 'round', interactive: true
       }).addTo(this.gRoad);
@@ -251,13 +269,10 @@ class MapView {
         this.select(s.idx);
         this.onSelect({ kind: 'seg', seg: s });
       });
-      ln.on('mouseover', () => { ln.setStyle({ weight: wLine + 2.4 }); });
-      ln.on('mouseout', () => { if (this.selected !== s.idx) ln.setStyle({ weight: this.lineWeight(s, this.map.getZoom()) }); });
       this.roadLines.push(ln);
       this.caseLines.push(cs);
     }
 
-    this.drawArrows();
     this.drawLandmarks();
     this.drawLocations();
     this.drawSignals();
@@ -274,43 +289,9 @@ class MapView {
     return base * (z >= 16 ? 1.15 : z >= 15 ? 0.94 : z >= 14 ? 0.78 : 0.64);
   }
 
-  /* ─────────────────────────── one-way direction arrows */
-  drawArrows() {
-    this.gArrow.clearLayers();
-    if (!this.show.arrow) return;
-    const z = this.map.getZoom();
-    if (z < 14) return;
-    const minRank = z >= 16 ? 1 : z >= 15 ? 2 : 3;
-    const spacing = z >= 17 ? 55 : z >= 16 ? 85 : z >= 15 ? 130 : 210;
-
-    for (const s of this.sim.segs) {
-      if (this.sim.localTestMode && this.sim.testLocationId && this.sim.testZoneSet.size && !this.sim.testZoneSet.has(s.idx)) continue;
-      if (s.rank < minRank) continue;
-      const n = Math.max(1, Math.floor(s.len / spacing));
-      for (let k = 0; k < n; k++) {
-        const d = (s.len * (k + 0.5)) / n;
-        const p = M.along(s.pts, s.cum, d);
-        const icon = L.divIcon({
-          className: 'ar-mk',
-          html: `<div style="transform:rotate(${p[2]}deg);font-size:${z >= 16 ? 11 : 9}px;line-height:1;
-                 color:rgba(150,200,255,.62);text-shadow:0 0 3px #000">&#10148;</div>`,
-          iconSize: [11, 11], iconAnchor: [5.5, 5.5]
-        });
-        // rotate marker: arrow glyph points right at 0°, so offset -90°
-        const html = `<div style="transform:rotate(${p[2] - 90}deg);font-size:${z >= 16 ? 11 : 9}px;
-                      line-height:1;color:rgba(150,200,255,.66);text-shadow:0 0 3px #000">&#10148;</div>`;
-        L.marker([p[0], p[1]], {
-          pane: 'pArrow', interactive: false, keyboard: false,
-          icon: L.divIcon({ className: 'ar-mk', html: html, iconSize: [11, 11], iconAnchor: [5.5, 5.5] })
-        }).addTo(this.gArrow);
-      }
-    }
-  }
-
-
   drawLandmarks() {
     this.gLm.clearLayers();
-    if (!this.show.lm) return;
+    if (!this.show.lm || this.performanceMode === 'ultra') return;
     const z = this.map.getZoom();
     const PRIO = { school:3, hospital:3, marketplace:3, townhall:3, university:3, college:3,
                    fast_food:2, supermarket:2, bus_station:2, police:2, department_store:2,
@@ -372,7 +353,7 @@ class MapView {
   drawSignals() {
     this.gSig.clearLayers();
     this.sigMarkers = {};
-    if (!this.show.signal) return;
+    if (!this.show.signal || this.performanceMode === 'ultra') return;
     for (const sg of this.sim.signals) {
       if (this.focusFilterActive && !this.pointInFocus(sg.lat, sg.lon)) continue;
       const mk = L.marker([sg.lat, sg.lon], {
@@ -385,7 +366,7 @@ class MapView {
   }
 
   refreshSignals() {
-    if (!this.show.signal) return;
+    if (!this.show.signal || this.performanceMode === 'ultra') return;
     for (const sg of this.sim.signals) {
       const mk = this.sigMarkers && this.sigMarkers[sg.id];
       if (!mk) continue;
@@ -425,7 +406,7 @@ class MapView {
  
   drawLabels() {
     this.gLabel.clearLayers();
-    if (!this.show.label) { this.map.removeLayer(this.gLabel); return; }
+    if (!this.show.label || this.performanceMode === 'ultra') { this.map.removeLayer(this.gLabel); return; }
     this.map.addLayer(this.gLabel);
     const z = this.map.getZoom();
     const minRank = z >= 16 ? 2 : z >= 15 ? 3 : 4;
@@ -511,6 +492,20 @@ class MapView {
       ctx.rotate(v.hdg * Math.PI / 180);
       ctx.globalAlpha = v.stoppedFlag ? .78 : 1;
 
+      // Performance/Ultra use a very cheap vehicle primitive. This avoids
+      // hundreds of path-building operations and shadows on every redraw,
+      // while keeping the vehicles visible and color-coded.
+      if (this.performanceMode !== 'normal') {
+        ctx.fillStyle = T.color;
+        ctx.fillRect(-bodyW/2, -bodyH/2, bodyW, bodyH);
+        if (z >= 15.5 && this.performanceMode === 'performance') {
+          ctx.fillStyle = 'rgba(8,18,28,.55)';
+          ctx.fillRect(-bodyW*.34, -bodyH*.22, bodyW*.68, bodyH*.28);
+        }
+        ctx.restore();
+        continue;
+      }
+
       // subtle shadow makes the tiny vehicles readable over road colors
       ctx.fillStyle = 'rgba(0,0,0,.48)';
       this.roundRect(ctx, -bodyW/2 + 1, -bodyH/2 + 1.2, bodyW, bodyH, Math.min(bodyW, bodyH)*.3); ctx.fill();
@@ -567,7 +562,7 @@ class MapView {
     ln.setStyle({ weight: this.lineWeight(s, this.map.getZoom()) + 3.4, opacity: 1 });
     // highlight arrow of travel direction
     this.selHalo = L.polyline(s.pts, {
-      pane: 'pArrow', color: '#ffffff', weight: this.lineWeight(s, this.map.getZoom()) + 6,
+      pane: 'pMark', color: '#ffffff', weight: this.lineWeight(s, this.map.getZoom()) + 6,
       opacity: 0.22, interactive: false, lineCap: 'round'
     }).addTo(this.map);
     // start / end markers showing direction
@@ -595,7 +590,7 @@ class MapView {
   highlightZone(L2) {
     if (this.zoneHi) this.map.removeLayer(this.zoneHi);
     const lines = L2.zoneIdx.map(i => L.polyline(this.sim.segs[i].pts, {
-      pane: 'pArrow', color: '#ffffff', weight: 6, opacity: 0.16, interactive: false, lineCap: 'round'
+      pane: 'pMark', color: '#ffffff', weight: 6, opacity: 0.16, interactive: false, lineCap: 'round'
     }));
     this.zoneHi = L.layerGroup(lines).addTo(this.map);
   }
@@ -613,7 +608,6 @@ class MapView {
       this.roadLines[i].setStyle({ weight: this.selected === i ? w + 3.4 : w });
       this.caseLines[i].setStyle({ weight: this.caseWeight(s, z) });
     }
-    this.drawArrows();
     this.drawLandmarks();
     if (this.show.label) this.drawLabels();
     this.scheduleVehicleDraw();
@@ -626,7 +620,6 @@ class MapView {
   setLayer(k, on) {
     this.show[k] = on;
     if (k === 'veh') this.drawVehicles();
-    if (k === 'arrow') this.drawArrows();
     if (k === 'lm') this.drawLandmarks();
     if (k === 'label') this.drawLabels();
     if (k === 'water') { if (on) this.map.addLayer(this.gWater); else this.map.removeLayer(this.gWater); }
@@ -662,8 +655,9 @@ class MapView {
     map.on('resize', resize);
     document.addEventListener('visibilitychange', () => { this.weatherVisible = !document.hidden; });
     this.weatherLoop = (now) => {
-      // Weather is decorative; cap it to ~30 FPS and pause while the map moves.
-      if (this.weatherVisible && !this.weatherReduced && !this.mapMoving && now - this.weatherLastDraw >= 33) {
+      const profile = this.performanceProfile[this.performanceMode] || this.performanceProfile.normal;
+      // Decorative weather is completely paused outside Normal mode.
+      if (profile.weather && this.weatherVisible && !this.weatherReduced && !this.mapMoving && now - this.weatherLastDraw >= profile.weatherMs) {
         this.drawWeather(now);
         this.weatherLastDraw = now;
       }
@@ -688,10 +682,52 @@ class MapView {
   setWeatherAnimation(type) {
     if (!this.weatherCanvas) return;
     this.weatherType = type || 'sunny';
+    const profile = this.performanceProfile[this.performanceMode] || this.performanceProfile.normal;
+    if (!profile.weather) {
+      this.weatherParticles = [];
+      this.weatherCtx && this.weatherCtx.clearRect(0, 0, this.weatherCanvas.width, this.weatherCanvas.height);
+      return;
+    }
     const counts = { sunny:0, cloudy:0, rainy:80, heavy_rain:150, storm:190, flooded:26 };
     const count = counts[this.weatherType] ?? 0;
     const w = this.map.getSize().x || 800, h = this.map.getSize().y || 600;
     this.weatherParticles = Array.from({length: count}, () => this.makeWeatherParticle(w, h, true));
+  }
+
+  setPerformanceMode(mode) {
+    const next = this.performanceProfile[mode] ? mode : 'normal';
+    this.performanceMode = next;
+    if (this.weatherCanvas) {
+      if (next === 'normal') {
+        this.weatherCanvas.style.display = '';
+        this.weatherCanvas.style.visibility = this.mapMoving ? 'hidden' : 'visible';
+        this.setWeatherAnimation(this.weatherType);
+      } else {
+        this.weatherParticles = [];
+        this.weatherCanvas.style.display = 'none';
+        if (this.weatherCtx) this.weatherCtx.clearRect(0, 0, this.weatherCanvas.width, this.weatherCanvas.height);
+      }
+    }
+    // Ultra keeps the simulation readable but removes the two most expensive
+    // nonessential marker groups: landmark DOM markers and signal DOM markers.
+    if (next === 'ultra') {
+      this.gLm.clearLayers();
+      this.gSig.clearLayers();
+      this.sigMarkers = {};
+      this.gLabel.clearLayers();
+      this.map.removeLayer(this.gLabel);
+    }
+    this.scheduleVehicleDraw();
+    if (!this.mapMoving) {
+      this.refreshRoads();
+      this.refreshSignals();
+      this.drawLandmarks();
+      if (next !== 'ultra' && this.show.label) this.drawLabels();
+    }
+  }
+
+  getPerformanceProfile() {
+    return this.performanceProfile[this.performanceMode] || this.performanceProfile.normal;
   }
 
   makeWeatherParticle(w, h, randomY) {

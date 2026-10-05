@@ -16,7 +16,11 @@ class Sim {
     this.weather = 'sunny';
     this.demand = 120;
     this.scenarios = new Set();
-    this.time = 6 * 3600;      // sim clock, seconds since midnight
+    this.startTime = 6 * 3600; // configurable simulation start time
+    this.time = this.startTime;
+    this.runDuration = 30 * 60; // configurable timer duration in simulation seconds
+    this.runElapsed = 0;
+    this.timerEnabled = true;
     this.dt = 0.6;             // seconds per tick
     this.running = false;
     this.tick = 0;
@@ -29,6 +33,10 @@ class Sim {
     this.incidents = [];
     this.signals = [];
     this.history = [];
+    this.eventLog = [];
+    this.eventSeq = 0;
+    this.lastActivityMinute = -1;
+    this.lastLoggedLevel = null;
     this.completed = 0;
     this.totalDelay = 0;
     this.totalTrips = 0;
@@ -37,6 +45,31 @@ class Sim {
     this.applyConditions();
     this.populate();
     this.computeStats();
+    this.logEvent('system', 'Simulation loaded', 'San Miguel, Bulacan traffic network is ready for simulation.');
+    this.logEvent('traffic', 'Initial traffic state', `${this.stats.vehicles} vehicles · ${M.fmt(this.stats.avgSpeed, 0)} km/h average · ${this.stats.level.key} network level.`);
+    this.lastLoggedLevel = this.stats.level.key;
+  }
+
+  /* ───────────────────────────────────────────── activity history */
+  logEvent(category, title, detail, location = '') {
+    const allowed = new Set(['traffic', 'weather', 'incident', 'system', 'location']);
+    const cat = allowed.has(category) ? category : 'system';
+    this.eventLog.push({
+      id: ++this.eventSeq,
+      time: this.time,
+      category: cat,
+      title: String(title || 'Event'),
+      detail: String(detail || ''),
+      location: String(location || '')
+    });
+    if (this.eventLog.length > 500) this.eventLog.splice(0, this.eventLog.length - 500);
+  }
+
+  scenarioLocationName(key) {
+    const sc = M.SCENARIOS.find(x => x.key === key);
+    if (!sc || !sc.at) return '';
+    const loc = this.locs.find(x => x.id === sc.at);
+    return loc ? loc.name : sc.at;
   }
 
   /* ────────────────────────────────────────────── graph construction */
@@ -526,6 +559,7 @@ class Sim {
     const dt = dtOverride || this.dt;
     const wx = M.WEATHER[this.weather];
     this.time = (this.time + dt) % 86400;
+    this.runElapsed += Math.max(0, dt);
     this.tick++;
 
     // Capacities only change when weather/scenarios change; do not recompute all 808 roads every tick.
@@ -683,6 +717,21 @@ class Sim {
     for (const v of this.vehicles) this.place(v);
     this.refreshSegments();
     if (this.tick % 25 === 0) this.pushHistory();
+
+    // Lightweight activity logging: one summary per simulated minute.
+    // This is intentionally event-based so the history panel does not add
+    // per-frame rendering or storage work.
+    const activityMinute = Math.floor(this.runElapsed / 60);
+    if (activityMinute !== this.lastActivityMinute) {
+      this.lastActivityMinute = activityMinute;
+      const st = this.computeStats();
+      const level = st.level.key;
+      this.logEvent('traffic', 'Traffic update', `${st.vehicles} vehicles · ${M.fmt(st.avgSpeed, 0)} km/h average · ${level} network level · ${st.waiting} waiting.`, this.localTestMode && this.testLocationId ? (this.testLocation()?.name || '') : 'San Miguel, Bulacan');
+      if (this.lastLoggedLevel && level !== this.lastLoggedLevel) {
+        this.logEvent('traffic', `Traffic level changed to ${level}`, `Network v/c ratio is ${M.fmt(st.vc, 2)} with ${M.fmt(st.congestedPct, 0)}% of directed road segments congested.`, 'San Miguel, Bulacan');
+      }
+      this.lastLoggedLevel = level;
+    }
   }
 
   /* ─────────────────────────────────── per-segment aggregation */
@@ -798,6 +847,7 @@ class Sim {
     this.routeCache.clear();
     this.populate();
     this.computeStats();
+    this.logEvent('location', 'Focused location changed', `Simulation is now focused on ${L ? L.name : 'the selected area'}.`, L ? L.name : 'San Miguel, Bulacan');
   }
 
   clearTestLocation() {
@@ -808,6 +858,7 @@ class Sim {
     this.routeCache.clear();
     this.populate();
     this.computeStats();
+    this.logEvent('location', 'Focused location cleared', 'Simulation returned to the whole San Miguel, Bulacan network.', 'San Miguel, Bulacan');
   }
 
   setWeather(k) {
@@ -817,6 +868,10 @@ class Sim {
     this.refreshCapacities();
     this.refreshSegments();
     this.computeStats();
+    const wx = M.WEATHER[k];
+    const affected = this.incidents.slice(0, 4).map(i => i.road).filter(Boolean);
+    const incidentText = this.incidents.length ? ` ${this.incidents.length} active incident${this.incidents.length > 1 ? 's' : ''}${affected.length ? ` on ${affected.join(', ')}` : ''}.` : '';
+    this.logEvent('weather', `Weather changed to ${wx.label}`, `Speed ×${wx.spd.toFixed(2)} · capacity ×${wx.cap.toFixed(2)}.${incidentText}`, 'San Miguel, Bulacan');
   }
 
   toggleScenario(k) {
@@ -834,6 +889,14 @@ class Sim {
     this.refreshCapacities();
     this.refreshSegments();
     this.computeStats();
+    const enabled = this.scenarios.has(k);
+    const location = this.scenarioLocationName(k);
+    let detail = enabled ? (sc ? sc.desc : 'Scenario enabled.') : 'Scenario disabled.';
+    if (enabled && this.incidents.length) {
+      const roads = this.incidents.slice(0, 4).map(i => i.road).filter(Boolean);
+      detail += ` Active now: ${this.incidents.length} incident${this.incidents.length > 1 ? 's' : ''}${roads.length ? ` (${roads.join(', ')})` : ''}.`;
+    }
+    this.logEvent(sc && sc.group === 'wx' ? 'weather' : 'incident', `${enabled ? 'Started' : 'Stopped'}: ${sc ? sc.label : k}`, detail, location || 'San Miguel, Bulacan');
   }
 
   clearScenarios() {
@@ -843,6 +906,7 @@ class Sim {
     this.refreshCapacities();
     this.refreshSegments();
     this.computeStats();
+    this.logEvent('system', 'Scenarios cleared', 'All active weather and traffic scenarios were removed.');
   }
 
   setDemand(n) {
@@ -850,17 +914,44 @@ class Sim {
     this.computeStats();
   }
 
+  setRunDuration(seconds) {
+    const sec = Math.max(1, Math.min(86400, Math.round(Number(seconds) || 1800)));
+    this.runDuration = sec;
+    this.runElapsed = Math.min(this.runElapsed, this.runDuration);
+    return sec;
+  }
+
+  setStartTime(hhmm) {
+    const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return false;
+    const h = Math.max(0, Math.min(23, Number(m[1])));
+    const min = Math.max(0, Math.min(59, Number(m[2])));
+    this.startTime = h * 3600 + min * 60;
+    this.time = this.startTime;
+    this.runElapsed = 0;
+    return true;
+  }
+
   reset() {
     this.rng = M.rng(this.rngSeed);
-    this.time = 6 * 3600;
+    this.time = this.startTime;
+    this.runElapsed = 0;
     this.tick = 0;
     this.completed = 0;
     this.totalDelay = 0;
     this.totalTrips = 0;
     this.history = [];
+    this.lastActivityMinute = -1;
+    this.lastLoggedLevel = this.stats ? this.stats.level.key : null;
     this.applyConditions();
     this.populate();
     this.computeStats();
+    this.logEvent('system', 'Simulation reset', `Clock reset to ${this.formatClock(this.time)} and vehicle state was regenerated.`);
+  }
+
+  formatClock(seconds) {
+    const t = ((Number(seconds) || 0) % 86400 + 86400) % 86400;
+    return String(Math.floor(t / 3600)).padStart(2, '0') + ':' + String(Math.floor((t % 3600) / 60)).padStart(2, '0');
   }
 
   /* run N steps headlessly (used by scenario presets) */

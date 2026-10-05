@@ -8,7 +8,24 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 
 let sim, view, raf = null, lastFrame = 0, captures = { A: null, B: null };
 let selectedInfo = null;
+let fpsRaf = null;
+let fpsLast = 0;
+let fpsFrames = 0;
+let fpsWindowStart = 0;
+let fpsSamples = [];
+let fpsLastValue = 0;
+let performanceMode = localStorage.getItem('traffic-performance-mode') || 'normal';
+const PERFORMANCE_META = {
+  normal: { label:'Balanced', desc:'Full visuals with optimized rendering.' },
+  performance: { label:'Performance', desc:'Weather animation off; dynamic layers refresh less often.' },
+  ultra: { label:'Ultra', desc:'Maximum FPS; weather animation and nonessential map refresh work are reduced.' }
+};
 let uiTheme = localStorage.getItem('traffic-ui-theme') || 'dark';
+let lastVehicleDraw = 0;
+let lastRoadRefresh = 0;
+let lastUiRefresh = 0;
+let historyFilter = 'all';
+let historyDirty = true;
 
 /* ════════════════════════ boot ════════════════════════ */
 (async function boot() {
@@ -35,10 +52,68 @@ let uiTheme = localStorage.getItem('traffic-ui-theme') || 'dark';
   buildPresets();
   applyTheme();
   bindControls();
+  applyPerformanceMode();
   renderAll();
+  startFPSMonitor();
 
   requestAnimationFrame(() => { $('#loading').classList.add('done'); });
 })();
+
+/* ════════════════════════ live FPS monitor ════════════════════════ */
+function startFPSMonitor() {
+  if (fpsRaf) return;
+  fpsLast = performance.now();
+  fpsWindowStart = fpsLast;
+  fpsFrames = 0;
+  fpsSamples = [];
+  const tick = now => {
+    const delta = now - fpsLast;
+    fpsLast = now;
+    if (!document.hidden && delta > 0 && delta < 250) {
+      fpsFrames++;
+      fpsSamples.push(delta);
+    }
+    if (now - fpsWindowStart >= 500) {
+      const elapsed = now - fpsWindowStart;
+      const fps = fpsFrames * 1000 / Math.max(1, elapsed);
+      const avgFrame = fpsSamples.length
+        ? fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length
+        : 0;
+      fpsLastValue = Math.max(0, Math.round(Math.min(999, fps)));
+      updateFPSUI(fpsLastValue, avgFrame);
+      fpsFrames = 0;
+      fpsSamples = [];
+      fpsWindowStart = now;
+    }
+    fpsRaf = requestAnimationFrame(tick);
+  };
+  fpsRaf = requestAnimationFrame(tick);
+}
+
+function updateFPSUI(fps, frameMs) {
+  const chip = $('#fpsChip');
+  const value = $('#hFps');
+  const status = $('#fpsStatus');
+  if (!chip || !value || !status) return;
+  value.textContent = fps ? String(fps) : '--';
+  chip.classList.remove('fps-good', 'fps-ok', 'fps-low', 'fps-critical');
+  if (!fps) {
+    status.textContent = 'Checking';
+  } else if (fps >= 55) {
+    chip.classList.add('fps-good');
+    status.textContent = 'Smooth';
+  } else if (fps >= 45) {
+    chip.classList.add('fps-ok');
+    status.textContent = 'Good';
+  } else if (fps >= 30) {
+    chip.classList.add('fps-low');
+    status.textContent = 'Dropping';
+  } else {
+    chip.classList.add('fps-critical');
+    status.textContent = 'Lagging';
+  }
+  chip.title = `Live rendering: ${fps} FPS, ${frameMs.toFixed(1)} ms/frame`;
+}
 
 /* ════════════════════════ control binding ════════════════════════ */
 function bindControls() {
@@ -47,6 +122,7 @@ function bindControls() {
     $$('.tab').forEach(x => x.classList.toggle('is-on', x === t));
     $$('.tabpane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === t.dataset.tab));
     if (t.dataset.tab === 'analytics') drawChart();
+    if (t.dataset.tab === 'history') { historyDirty = true; renderHistory(); }
   }));
 
   // mobile bar + panel toggle
@@ -73,19 +149,94 @@ function bindControls() {
   // run controls
   $('#btnPlay').addEventListener('click', togglePlay);
   $('#btnStep').addEventListener('click', () => {
-    sim.step(sim.dt * 5);
+    if (sim.timerEnabled && sim.runElapsed >= sim.runDuration) return;
+    const stepDt = sim.timerEnabled ? Math.min(sim.dt * 5, sim.runDuration - sim.runElapsed) : sim.dt * 5;
+    sim.step(stepDt);
+    sim.logEvent('system', 'Manual simulation step', `Advanced the simulation by ${stepDt.toFixed(1)} simulation seconds.`);
+    historyDirty = true;
+    if (sim.timerEnabled && sim.runElapsed >= sim.runDuration) finishRunTimer();
     sim.computeStats();
     view.refresh();
     renderAll();
   });
   $('#btnReset').addEventListener('click', () => {
     sim.reset();
+    historyDirty = true;
     view.drawIncidents();
     view.refresh();
     renderAll();
   });
   $('#simSpeed').addEventListener('input', e => {
     $('#simSpeedTxt').textContent = e.target.value + '\u00d7';
+  });
+  function readTimerInputs() {
+    const h = Math.max(0, Math.min(24, Math.round(Number($('#runHours').value) || 0)));
+    const m = Math.max(0, Math.min(59, Math.round(Number($('#runMinutes').value) || 0)));
+    const s = Math.max(0, Math.min(59, Math.round(Number($('#runSeconds').value) || 0)));
+    let total = h * 3600 + m * 60 + s;
+    total = Math.max(1, Math.min(86400, total));
+    const normalizedH = Math.floor(total / 3600);
+    const normalizedM = Math.floor((total % 3600) / 60);
+    const normalizedS = total % 60;
+    $('#runHours').value = normalizedH;
+    $('#runMinutes').value = normalizedM;
+    $('#runSeconds').value = normalizedS;
+    return total;
+  }
+
+  function applyTimerSettings(resetRun = true) {
+    const total = readTimerInputs();
+    sim.setRunDuration(total);
+    sim.logEvent('system', 'Run timer configured', `Run duration set to ${formatDuration(total)} simulation time.`);
+    historyDirty = true;
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const parts = [];
+    if (h) parts.push(`${h}h`);
+    if (m || h) parts.push(`${m}m`);
+    if (sec || (!h && !m)) parts.push(`${sec}s`);
+    $('#timerNote').textContent = `${parts.join(' ')} simulation time. At higher Speed, it finishes sooner in real time.`;
+    if (resetRun) {
+      if (sim.running) togglePlay();
+      sim.reset();
+      view.drawIncidents();
+      view.refresh();
+      renderAll();
+    } else {
+      renderTimer();
+    }
+  }
+
+  $('#btnApplyTimer').addEventListener('click', () => applyTimerSettings(true));
+  ['runHours','runMinutes','runSeconds'].forEach(id => {
+    $('#' + id).addEventListener('change', () => applyTimerSettings(false));
+  });
+  $$('.timer-presets button').forEach(b => b.addEventListener('click', () => {
+    const total = Math.max(1, Math.min(86400, Number(b.dataset.timerMin) * 60));
+    $('#runHours').value = Math.floor(total / 3600);
+    $('#runMinutes').value = Math.floor((total % 3600) / 60);
+    $('#runSeconds').value = total % 60;
+    applyTimerSettings(true);
+  }));
+  $('#simStartTime').addEventListener('change', e => {
+    if (!sim.setStartTime(e.target.value)) {
+      e.target.value = '06:00';
+      sim.setStartTime('06:00');
+    }
+    if (sim.running) togglePlay();
+    sim.logEvent('system', 'Simulation start time changed', `Simulation clock set to ${e.target.value}.`);
+    historyDirty = true;
+    sim.reset();
+    view.drawIncidents();
+    view.refresh();
+    renderAll();
+  });
+  $('#timerEnabled').addEventListener('change', e => {
+    sim.timerEnabled = e.target.checked;
+    sim.logEvent('system', e.target.checked ? 'Automatic timer enabled' : 'Automatic timer disabled', e.target.checked ? 'The run will stop when the configured simulation duration is reached.' : 'The simulation can continue until manually paused.');
+    historyDirty = true;
+    renderTimer();
   });
 
   // demand
@@ -106,6 +257,7 @@ function bindControls() {
     const match = wxScn.find(s => s.wx === b.dataset.w);
     if (match) sim.scenarios.add(match.key);
     sim.applyConditions(); sim.refreshCapacities(); sim.refreshSegments(); sim.computeStats();
+    historyDirty = true;
     view.drawIncidents(); view.refresh();
     renderAll();
   }));
@@ -156,8 +308,13 @@ function bindControls() {
     }
   });
 
+  // performance modes
+  $$('#perfModes .perf-btn').forEach(b => b.addEventListener('click', () => {
+    setPerformanceMode(b.dataset.perf);
+  }));
+
   // layer toggles
-  const map = { tgVeh:'veh', tgArrow:'arrow', tgTraffic:'traffic', tgSignal:'signal',
+  const map = { tgVeh:'veh', tgTraffic:'traffic', tgSignal:'signal',
                 tgIncident:'incident', tgLm:'lm', tgWater:'water', tgLabel:'label' };
   Object.entries(map).forEach(([id, key]) => {
     $('#' + id).addEventListener('change', e => view.setLayer(key, e.target.checked));
@@ -168,6 +325,20 @@ function bindControls() {
     $('#inspector').classList.remove('is-on');
     view.clearSelection();
     selectedInfo = null;
+  });
+
+  // activity history
+  $$('#historyFilters .history-filter').forEach(b => b.addEventListener('click', () => {
+    historyFilter = b.dataset.historyFilter || 'all';
+    $$('#historyFilters .history-filter').forEach(x => x.classList.toggle('is-on', x === b));
+    historyDirty = true;
+    renderHistory();
+  }));
+  $('#btnClearHistory').addEventListener('click', () => {
+    sim.eventLog = [];
+    sim.logEvent('system', 'History cleared', 'Activity history was cleared by the user.');
+    historyDirty = true;
+    renderHistory();
   });
 
   // comparison
@@ -184,6 +355,21 @@ function bindControls() {
   });
 }
 
+function setPerformanceMode(mode) {
+  if (!PERFORMANCE_META[mode]) mode = 'normal';
+  performanceMode = mode;
+  localStorage.setItem('traffic-performance-mode', mode);
+  if (view && view.setPerformanceMode) view.setPerformanceMode(mode);
+  $$('#perfModes .perf-btn').forEach(b => b.classList.toggle('is-on', b.dataset.perf === mode));
+  const meta = PERFORMANCE_META[mode];
+  if ($('#perfModeNote')) $('#perfModeNote').textContent = meta.label;
+  if ($('#perfModeDesc')) $('#perfModeDesc').textContent = meta.desc;
+}
+
+function applyPerformanceMode() {
+  setPerformanceMode(performanceMode);
+}
+
 function applyTheme() {
   document.body.classList.toggle('light-ui', uiTheme === 'light');
   const b = $('#btnTheme');
@@ -195,8 +381,54 @@ function toggleTheme() {
   applyTheme();
 }
 
+function formatDuration(totalSeconds) {
+  const sec = Math.max(0, Math.ceil(totalSeconds));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function renderTimer() {
+  const el = $('#simTimer');
+  const chip = $('#timerChip');
+  if (!el || !sim) return;
+  const remaining = Math.max(0, sim.runDuration - sim.runElapsed);
+  el.textContent = sim.timerEnabled ? formatDuration(remaining) : 'OFF';
+  if (chip) {
+    chip.classList.toggle('timer-done', sim.timerEnabled && remaining <= 0);
+    chip.classList.toggle('timer-off', !sim.timerEnabled);
+    chip.title = sim.timerEnabled
+      ? `Simulation run timer: ${formatDuration(remaining)} remaining`
+      : 'Automatic run timer is disabled';
+  }
+}
+
+function finishRunTimer() {
+  sim.runElapsed = sim.runDuration;
+  sim.time = (sim.startTime + sim.runDuration) % 86400;
+  sim.running = false;
+  sim.logEvent('system', 'Run timer finished', `The configured ${formatDuration(sim.runDuration)} simulation run reached its end.`);
+  historyDirty = true;
+  const b = $('#btnPlay');
+  b.classList.remove('is-run');
+  $('#playIco').innerHTML = '&#9654;';
+  $('#playTxt').textContent = 'Start';
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  renderTimer();
+  renderClock();
+}
+
 function togglePlay() {
+  if (!sim.running && sim.timerEnabled && sim.runElapsed >= sim.runDuration) {
+    sim.runElapsed = 0;
+    sim.time = sim.startTime;
+    sim.tick = 0;
+  }
   sim.running = !sim.running;
+  sim.logEvent('system', sim.running ? 'Simulation started' : 'Simulation paused', sim.running ? 'Vehicle movement and traffic conditions are now advancing.' : 'Simulation time and vehicle movement are paused.');
+  historyDirty = true;
   const b = $('#btnPlay');
   b.classList.toggle('is-run', sim.running);
   $('#playIco').innerHTML = sim.running ? '&#10074;&#10074;' : '&#9654;';
@@ -214,27 +446,41 @@ function loop() {
   lastFrame = now;
 
   const mult = +$('#simSpeed').value;
-  const steps = Math.max(1, Math.round(mult));
-  const dt = Math.max(0.25, real * 12);
-  for (let i = 0; i < steps; i++) sim.step(dt);
+  // Run one simulation update per browser frame instead of several full
+  // network passes in the same frame. The previous loop could execute up to
+  // 8 expensive vehicle/road updates back-to-back and caused an immediate
+  // FPS drop as soon as the simulation started moving vehicles.
+  // Scale the timestep to preserve the selected simulation speed while
+  // keeping the amount of JavaScript work per frame predictable.
+  const dtBase = Math.min(0.9, Math.max(0.25, real * 12 * mult));
+  const dt = sim.timerEnabled ? Math.min(dtBase, Math.max(0, sim.runDuration - sim.runElapsed)) : dtBase;
+  if (dt > 0) sim.step(dt);
+  if (sim.timerEnabled && sim.runElapsed >= sim.runDuration) finishRunTimer();
 
-  // Keep the animation smooth: simulation/render work is staged instead of doing
-  // every expensive calculation on every browser frame. Vehicles stay 60fps-ish
-  // on canvas, while road/stat layers update at a lower cadence.
-  if (sim.tick % 6 === 0) sim.computeStats();
-  view.drawVehicles();
+  // Performance budget: keep the simulation responsive, but do not repaint
+  // expensive UI/map layers at the browser's full 60 Hz. Static road geometry
+  // is SVG and is moved by Leaflet; dynamic vehicles are capped at ~30 FPS.
+  if (sim.tick % 8 === 0) sim.computeStats();
 
-  if (sim.tick % 3 === 0) {
+  const perf = view.getPerformanceProfile();
+  if (!view.mapMoving && now - lastVehicleDraw >= perf.vehicleMs) {
+    view.drawVehicles();
+    lastVehicleDraw = now;
+  }
+
+  if (!view.mapMoving && now - lastRoadRefresh >= perf.roadMs) {
     view.refreshRoads();
     view.refreshSignals();
     renderClock(); renderKpis(); renderHeader();
+    lastRoadRefresh = now;
   }
-  if (sim.tick % 6 === 0) {
+  if (!view.mapMoving && now - lastUiRefresh >= perf.uiMs) {
     view.refreshLocationPins();
     renderLocations(); renderLocStats();
     if ($('.tabpane[data-pane=analytics]').classList.contains('is-on')) drawChart();
+    lastUiRefresh = now;
   }
-  if (sim.tick % 20 === 0 && selectedInfo) renderInspector(selectedInfo);
+  if (sim.tick % 30 === 0 && selectedInfo) renderInspector(selectedInfo);
 }
 
 /* ════════════════════════ scenario chips ════════════════════════ */
@@ -748,15 +994,64 @@ function renderNetMeta() {
   $('#netMeta').innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
 }
 
+function formatEventTime(seconds) {
+  const t = ((Number(seconds) || 0) % 86400 + 86400) % 86400;
+  return String(Math.floor(t / 3600)).padStart(2, '0') + ':' + String(Math.floor((t % 3600) / 60)).padStart(2, '0');
+}
+
+function historyIcon(category) {
+  return ({ traffic:'🚦', weather:'☁', incident:'⚠', location:'📍', system:'•' })[category] || '•';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function renderHistory() {
+  const list = $('#historyList');
+  const status = $('#historyStatus');
+  if (!list || !status || !sim) return;
+  const st = sim.stats || {};
+  const focus = sim.localTestMode && sim.testLocationId ? (sim.testLocation()?.name || 'Focused area') : 'Whole San Miguel network';
+  status.innerHTML = [
+    ['Simulation time', formatEventTime(sim.time)],
+    ['Weather', (st.weather?.icon || '☀') + ' ' + (st.weather?.label || 'Sunny')],
+    ['Traffic', st.level?.key || 'LOW'],
+    ['Vehicles', st.vehicles ?? 0],
+    ['Focus', focus]
+  ].map(([k,v]) => `<div><small>${escapeHtml(k)}</small><b>${escapeHtml(v)}</b></div>`).join('');
+
+  const all = Array.isArray(sim.eventLog) ? sim.eventLog : [];
+  const filtered = historyFilter === 'all' ? all : all.filter(e => e.category === historyFilter);
+  const entries = filtered.slice(-200).reverse();
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty">No history events for this filter yet.</div>';
+    historyDirty = false;
+    return;
+  }
+  list.innerHTML = entries.map(e => `<article class="history-item history-${escapeHtml(e.category)}">
+    <div class="history-time">${escapeHtml(formatEventTime(e.time))}</div>
+    <div class="history-icon" aria-hidden="true">${historyIcon(e.category)}</div>
+    <div class="history-content">
+      <div class="history-item-top"><b>${escapeHtml(e.title)}</b><span>${escapeHtml(e.category)}</span></div>
+      <p>${escapeHtml(e.detail)}</p>
+      ${e.location ? `<small>📍 ${escapeHtml(e.location)}</small>` : ''}
+    </div>
+  </article>`).join('');
+  historyDirty = false;
+}
+
 /* ════════════════════════ master render ════════════════════════ */
 function renderAll() {
   syncScenarioUI();
   renderClock();
+  renderTimer();
   renderHeader();
   renderKpis();
   renderLocations();
   renderLocStats();
   renderNetMeta();
   renderCompare();
+  if ($('.tabpane[data-pane=history]')?.classList.contains('is-on') && historyDirty) renderHistory();
   drawChart();
 }
